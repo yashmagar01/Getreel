@@ -5,14 +5,9 @@ import UrlInput from "@/components/UrlInput";
 import LoadingState from "@/components/LoadingState";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
 import PromisedLinkCTA from "@/components/PromisedLinkCTA";
-import type { PromisedLink } from "@/lib/api";
+import type { PromisedLink, AnalyzeResult } from "@/lib/api";
 
-interface Result {
-  roadmap: string;
-  concept: string;
-  promised_link: PromisedLink | null;
-  from_cache: boolean;
-}
+type Result = AnalyzeResult;
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);

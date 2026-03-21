@@ -1,15 +1,18 @@
 export interface PromisedLink {
   url: string;
   description: string;
-  source: "comments" | "web_search";
+  source: "caption" | "transcript" | "bio" | "bio_aggregator" | "targeted_search" | "generic_search";
+  confidence: "high" | "medium" | "low";
 }
 
-export async function analyzeReel(url: string): Promise<{
+export interface AnalyzeResult {
   roadmap: string;
-  concept: string;
+  concept: Record<string, unknown>;
   promised_link: PromisedLink | null;
   from_cache: boolean;
-}> {
+}
+
+export async function analyzeReel(url: string): Promise<AnalyzeResult> {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
   if (!backendUrl) {
     throw new Error("Backend URL is not configured. Set NEXT_PUBLIC_BACKEND_URL.");

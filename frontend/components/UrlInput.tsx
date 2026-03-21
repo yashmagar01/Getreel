@@ -2,10 +2,10 @@
 
 import { useState, useRef } from "react";
 
-import type { PromisedLink } from "@/lib/api";
+import type { AnalyzeResult } from "@/lib/api";
 
 interface UrlInputProps {
-  onResult: (data: { roadmap: string; concept: string; promised_link: PromisedLink | null; from_cache: boolean }) => void;
+  onResult: (data: AnalyzeResult) => void;
   onLoadingChange: (loading: boolean) => void;
   isLoading: boolean;
 }
