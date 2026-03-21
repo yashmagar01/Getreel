@@ -12,7 +12,7 @@ def download_reel(instagram_url: str, temp_dir: str) -> dict:
     Also fetches comments for the link-finder feature.
 
     Returns:
-        {"video_path": str, "audio_path": str, "comments": list}
+        {"video_path": str, "audio_path": str, "info": dict}
 
     Raises:
         Exception: Human-readable message if download or extraction fails.
@@ -102,5 +102,5 @@ def download_reel(instagram_url: str, temp_dir: str) -> dict:
     return {
         "video_path": video_path,
         "audio_path": audio_path,
-        "comments": comments,
+        "info": info,
     }

@@ -73,89 +73,85 @@ async def health():
 
 # ── Main Endpoint ─────────────────────────────────────────────────────────────
 @app.post("/analyze")
-async def analyze(body: AnalyzeRequest, request: Request):
-    url = body.instagram_url.strip()
+async def analyze(request: AnalyzeRequest, req: Request):
+    url = str(request.instagram_url).strip()
 
-    # 1. Validate URL format
-    if not validate_reel_url(url):
+    if not INSTAGRAM_REEL_PATTERN.match(url):
         raise HTTPException(
             status_code=400,
-            detail="Invalid URL. Please provide a valid Instagram Reel URL "
-                   "(https://www.instagram.com/reel/...).",
+            detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/..."
         )
 
-    # 2. Rate limiting
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = req.client.host if req.client else "unknown"
     if not check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429,
-            detail="You've decoded 5 reels this hour. Please wait before decoding more.",
+            detail="You've decoded 5 reels this hour. Please wait before decoding more."
         )
 
-    # 3. Cache check
+    # Cache check
     cached = get_cached_result(url)
     if cached:
-        logger.info(f"Cache hit for URL: {url[:50]}...")
+        logger.info(f"Cache hit: {url[:50]}...")
         return {
             "roadmap": cached["roadmap_markdown"],
-            "concept": cached.get("concept_summary", ""),
-            "promised_link": cached.get("promised_link"),  # may be None for old rows
+            "concept": cached.get("concept_summary"),
+            "promised_link": cached.get("promised_link"),
             "from_cache": True,
         }
 
-    # 4. Full pipeline with automatic temp-dir cleanup
+    logger.info(f"Starting analysis: {url[:50]}...")
     temp_dir = tempfile.mkdtemp()
+
     try:
-        logger.info(f"Starting analysis for URL: {url[:50]}...")
+        # ── 1. Download ────────────────────────────────────────────────────
+        download_result = download_reel(url, temp_dir)
+        video_path = download_result["video_path"]
+        audio_path = download_result["audio_path"]
+        info       = download_result["info"]          # full yt-dlp dict
+        logger.info(f"Download complete: {video_path}")
 
-        # Download (also fetches comments for link-finder)
-        dl = download_reel(url, temp_dir)
-        video_path = dl["video_path"]
-        audio_path = dl["audio_path"]
-        comments   = dl.get("comments", [])
-        logger.info(f"Download complete. Video: {video_path}. Comments: {len(comments)}")
-
-        # Duration guard — reject reels > 5 minutes
-        import ffmpeg as ffmpeg_lib
-        probe = ffmpeg_lib.probe(video_path)
-        duration = float(probe["format"]["duration"])
+        # ── 2. Duration guard ──────────────────────────────────────────────
+        duration = float(info.get("duration") or 0)
         if duration > 300:
-            raise Exception(
-                "This reel is too long to process on the free tier. "
-                "The decoder works best on reels under 5 minutes."
+            raise HTTPException(
+                status_code=400,
+                detail="Reel is over 5 minutes — too long for the free tier pipeline."
             )
 
-        # Transcribe
+        # ── 3. Transcribe ─────────────────────────────────────────────────
         transcript = transcribe_audio(audio_path)
-        logger.info(f"Transcript length: {len(transcript)} chars")
+        logger.info(f"Transcript: {len(transcript)} chars")
 
-        # Extract frames
-        frames_b64 = extract_frames(video_path, temp_dir)
-        logger.info(f"Extracted {len(frames_b64)} frames")
+        # ── 4. Extract frames ─────────────────────────────────────────────
+        frames = extract_frames(video_path, temp_dir)
+        logger.info(f"Frames: {len(frames)}")
 
-        # Analyze concept with Gemini
-        concept = analyze_concept(transcript, frames_b64)
-        logger.info(f"Gemini concept extracted: {concept.get('topic', '')}")
+        # ── 5. Concept analysis ───────────────────────────────────────────
+        concept = analyze_concept(transcript, frames)
+        logger.info(f"Concept: {concept.get('topic', concept.get('skill_taught', 'unknown'))}")
 
-        # Find the promised link (comments first, then web search fallback)
-        promised_link = find_promised_link(comments, concept)
+        # ── 6. Find promised link (all 5 layers) ──────────────────────────
+        promised_link = find_promised_link(info, transcript, concept)
         if promised_link:
-            logger.info(f"Promised link resolved: {promised_link['url']}")
+            logger.info(
+                f"Promised link found via [{promised_link.get('source', 'unknown')}] "
+                f"confidence={promised_link.get('confidence', '100%')}: {promised_link.get('url', '')}"
+            )
         else:
-            logger.info("No promised link found for this reel.")
+            logger.info("No promised link found across all 5 layers.")
 
-        # Generate roadmap with Groq Llama
+        # ── 7. Generate roadmap ───────────────────────────────────────────
         roadmap = generate_roadmap(concept)
-        logger.info(f"Roadmap generated. Length: {len(roadmap)} chars")
+        logger.info(f"Roadmap: {len(roadmap)} chars")
 
-        # Save to cache (including promised_link)
+        # ── 8. Cache ──────────────────────────────────────────────────────
         save_result(url, transcript, concept, roadmap, promised_link)
-        logger.info("Result cached in Supabase.")
+        logger.info("Cached in Supabase.")
 
-        import json
         return {
             "roadmap": roadmap,
-            "concept": json.dumps(concept),
+            "concept": concept,
             "promised_link": promised_link,
             "from_cache": False,
         }
@@ -163,14 +159,9 @@ async def analyze(body: AnalyzeRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        err_msg = str(e)
-
-        # Pass through error messages from the pipeline as-is (they are already user-friendly)
-        detail = f"Processing failed: {err_msg}"
-
-        logger.error(f"Pipeline error: {err_msg}")
-        raise HTTPException(status_code=500, detail=detail)
-
+        logger.error(f"Pipeline error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
+        import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)
-        logger.info("Temp files cleaned up.")
+        logger.info("Temp dir cleaned up.")

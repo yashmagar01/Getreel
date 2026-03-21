@@ -111,22 +111,27 @@ def _search_web(concept: dict) -> dict | None:
     return None
 
 
-def find_promised_link(comments: list, concept: dict) -> dict | None:
+def find_promised_link(info: dict, transcript: str, concept: dict) -> dict | None:
     """
     Main entry point. Returns a dict with keys:
       url         — the actual link
       description — one or two line human-readable description
       source      — 'comments' | 'web_search'
+      confidence  — 'high', 'medium', etc.
     Returns None if nothing found.
     """
+    comments = info.get("comments", []) or []
+
     # 1. Try reel comments first — most direct
     result = _search_comments(comments)
     if result:
+        result["confidence"] = "High (from comments)"
         return result
 
     # 2. Fall back to targeted web search
     result = _search_web(concept)
     if result:
+        result["confidence"] = "Medium (from web search fallback)"
         return result
 
     logger.info("No external link found via comments or web search")
