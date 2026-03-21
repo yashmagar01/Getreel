@@ -2,8 +2,17 @@ services:
   - type: web
     name: reel-decoder-backend
     env: python
+    rootDir: backend
     buildCommand: apt-get install -y ffmpeg && pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PORT
-        value: 8000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: INSTAGRAM_COOKIES_PATH
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
