@@ -1,7 +1,10 @@
 import os
 import hashlib
 import json
+import logging
 from supabase import create_client, Client
+
+logger = logging.getLogger(__name__)
 
 
 def _get_client() -> Client:
@@ -20,7 +23,6 @@ def _hash_url(url: str) -> str:
 def get_cached_result(url: str) -> dict | None:
     """
     Look up a previously decoded reel by URL.
-
     Returns the full row dict if found, None if not cached.
     """
     try:
@@ -34,19 +36,30 @@ def get_cached_result(url: str) -> dict | None:
             .execute()
         )
         if response.data:
-            return response.data[0]
+            row = response.data[0]
+            # promised_link is stored as a JSON string — deserialise if present
+            if row.get("promised_link") and isinstance(row["promised_link"], str):
+                try:
+                    row["promised_link"] = json.loads(row["promised_link"])
+                except Exception:
+                    pass
+            return row
         return None
     except Exception as e:
-        # Cache miss is non-fatal — log and continue
-        import logging
-        logging.getLogger(__name__).warning(f"Cache lookup failed: {str(e)}")
+        logger.warning(f"Cache lookup failed: {str(e)}")
         return None
 
 
-def save_result(url: str, transcript: str, concept: dict, roadmap: str) -> None:
+def save_result(
+    url: str,
+    transcript: str,
+    concept: dict,
+    roadmap: str,
+    promised_link: dict | None = None,
+) -> None:
     """
     Save a decoded reel result to Supabase.
-    Uses upsert (on conflict do nothing) so duplicate processing never crashes.
+    Uses upsert (on conflict update) so duplicate processing never crashes.
     """
     try:
         client = _get_client()
@@ -57,8 +70,9 @@ def save_result(url: str, transcript: str, concept: dict, roadmap: str) -> None:
             "transcript": transcript,
             "concept_summary": json.dumps(concept),
             "roadmap_markdown": roadmap,
+            "promised_link": json.dumps(promised_link) if promised_link else None,
         }
         client.table("reel_cache").upsert(row, on_conflict="url_hash").execute()
+        logger.info("Saved to cache.")
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Cache save failed (non-fatal): {str(e)}")
+        logger.warning(f"Cache save failed (non-fatal): {str(e)}")

@@ -4,10 +4,13 @@ import { useState } from "react";
 import UrlInput from "@/components/UrlInput";
 import LoadingState from "@/components/LoadingState";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
+import PromisedLinkCTA from "@/components/PromisedLinkCTA";
+import type { PromisedLink } from "@/lib/api";
 
 interface Result {
   roadmap: string;
   concept: string;
+  promised_link: PromisedLink | null;
   from_cache: boolean;
 }
 
@@ -106,6 +109,9 @@ export default function Home() {
               Decode another reel
             </button>
 
+            {result.promised_link && (
+              <PromisedLinkCTA link={result.promised_link} />
+            )}
             <RoadmapDisplay roadmap={result.roadmap} fromCache={result.from_cache} />
           </>
         )}

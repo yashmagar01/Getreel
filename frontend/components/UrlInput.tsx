@@ -2,8 +2,10 @@
 
 import { useState, useRef } from "react";
 
+import type { PromisedLink } from "@/lib/api";
+
 interface UrlInputProps {
-  onResult: (data: { roadmap: string; concept: string; from_cache: boolean }) => void;
+  onResult: (data: { roadmap: string; concept: string; promised_link: PromisedLink | null; from_cache: boolean }) => void;
   onLoadingChange: (loading: boolean) => void;
   isLoading: boolean;
 }

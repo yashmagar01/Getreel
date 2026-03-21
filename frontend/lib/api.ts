@@ -1,6 +1,13 @@
+export interface PromisedLink {
+  url: string;
+  description: string;
+  source: "comments" | "web_search";
+}
+
 export async function analyzeReel(url: string): Promise<{
   roadmap: string;
   concept: string;
+  promised_link: PromisedLink | null;
   from_cache: boolean;
 }> {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;

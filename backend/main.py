@@ -19,6 +19,7 @@ from analyzer import analyze_concept
 from roadmap_generator import generate_roadmap
 from cache import get_cached_result, save_result
 from rate_limiter import check_rate_limit
+from link_finder import find_promised_link
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -98,6 +99,7 @@ async def analyze(body: AnalyzeRequest, request: Request):
         return {
             "roadmap": cached["roadmap_markdown"],
             "concept": cached.get("concept_summary", ""),
+            "promised_link": cached.get("promised_link"),  # may be None for old rows
             "from_cache": True,
         }
 
@@ -106,11 +108,12 @@ async def analyze(body: AnalyzeRequest, request: Request):
     try:
         logger.info(f"Starting analysis for URL: {url[:50]}...")
 
-        # Download
+        # Download (also fetches comments for link-finder)
         dl = download_reel(url, temp_dir)
         video_path = dl["video_path"]
         audio_path = dl["audio_path"]
-        logger.info(f"Download complete. Video: {video_path}")
+        comments   = dl.get("comments", [])
+        logger.info(f"Download complete. Video: {video_path}. Comments: {len(comments)}")
 
         # Duration guard — reject reels > 5 minutes
         import ffmpeg as ffmpeg_lib
@@ -134,18 +137,26 @@ async def analyze(body: AnalyzeRequest, request: Request):
         concept = analyze_concept(transcript, frames_b64)
         logger.info(f"Gemini concept extracted: {concept.get('topic', '')}")
 
+        # Find the promised link (comments first, then web search fallback)
+        promised_link = find_promised_link(comments, concept)
+        if promised_link:
+            logger.info(f"Promised link resolved: {promised_link['url']}")
+        else:
+            logger.info("No promised link found for this reel.")
+
         # Generate roadmap with Groq Llama
         roadmap = generate_roadmap(concept)
         logger.info(f"Roadmap generated. Length: {len(roadmap)} chars")
 
-        # Save to cache
-        save_result(url, transcript, concept, roadmap)
+        # Save to cache (including promised_link)
+        save_result(url, transcript, concept, roadmap, promised_link)
         logger.info("Result cached in Supabase.")
 
         import json
         return {
             "roadmap": roadmap,
             "concept": json.dumps(concept),
+            "promised_link": promised_link,
             "from_cache": False,
         }
 
