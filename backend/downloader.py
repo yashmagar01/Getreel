@@ -54,10 +54,20 @@ def download_reel(url: str, temp_dir: str) -> dict:
             )
     except yt_dlp.utils.DownloadError as e:
         msg = str(e).lower()
-        if "private" in msg or "login" in msg:
+        logger.error(f"yt-dlp error: {e}") # Log raw error for diagnostics
+        
+        if "private" in msg:
             raise Exception("This reel is from a private account. Only public reels are supported.")
+        
+        if "login" in msg or "rate-limit" in msg or "429" in msg:
+            raise Exception("Instagram is rate-limiting or your cookies.txt has expired. Please refresh your cookies.")
+            
+        if "empty media response" in msg:
+            raise Exception("This reel could not be fetched — it may be a collaborative post or age-restricted content.")
+            
         if "not found" in msg or "does not exist" in msg:
             raise Exception("This reel no longer exists or has been removed.")
+            
         raise Exception(
             f"Could not download this reel. Try refreshing cookies.txt. Details: {e}"
         )

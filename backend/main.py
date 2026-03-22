@@ -20,6 +20,7 @@ from roadmap_generator import generate_roadmap
 from cache import get_cached_result, save_result
 from rate_limiter import check_rate_limit
 from link_finder import find_promised_link
+from dm_interceptor import init_ig_client
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -41,6 +42,11 @@ def validate_reel_url(url: str) -> bool:
 # ── Startup/shutdown ──────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize Layer 0 Instagram client (burner account)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, init_ig_client)
+    
     logger.info("Server is warm and ready ✅")
     yield
 
@@ -152,6 +158,19 @@ async def analyze(request: AnalyzeRequest, req: Request):
         # ── 7. Generate roadmap ───────────────────────────────────────────
         roadmap = generate_roadmap(concept)
         logger.info(f"Roadmap: {len(roadmap)} chars")
+
+        # ── 7.5 Guarantee non-null fields ────────────────────────────────
+        roadmap = roadmap or "Unable to generate roadmap. Please try again."
+        if not concept or not concept.get("topic"):
+            concept = concept or {}
+            concept.update({
+                "topic": concept.get("topic") or "Could not extract topic",
+                "what_creator_shows": concept.get("what_creator_shows") or "",
+                "what_creator_withholds": concept.get("what_creator_withholds") or "",
+                "target_audience": concept.get("target_audience") or "",
+                "tools_mentioned": concept.get("tools_mentioned") or [],
+                "key_concepts": concept.get("key_concepts") or []
+            })
 
         # ── 8. Cache ──────────────────────────────────────────────────────
         save_result(url, transcript, concept, roadmap, promised_link)

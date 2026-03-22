@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 const STATUS_MESSAGES = [
+  { icon: "🤖", text: "Pinging creator's bot for the direct link..." },
   { icon: "⬇️", text: "Downloading the reel..." },
   { icon: "🎙️", text: "Transcribing what they said..." },
   { icon: "🖼️", text: "Extracting video frames..." },

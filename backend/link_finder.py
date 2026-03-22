@@ -32,6 +32,7 @@ import random
 import asyncio
 import logging
 import httpx
+from dm_interceptor import intercept_via_dm
 
 logger = logging.getLogger(__name__)
 
@@ -1345,6 +1346,24 @@ async def find_promised_link(
     handle = extract_handle_from_url(info)
 
     logger.info(f"[RESOLVER] Starting 3-tier resolution for '{uploader_name}' @{handle}")
+
+    # ── Layer 0: DM Bot Interception ──────────────────────────────────────────
+    shortcode = ""
+    if "webpage_url" in info:
+        # Extract shortcode if possible
+        sc_match = re.search(r"/reel/([^/?#&]+)", info["webpage_url"])
+        if sc_match:
+            shortcode = sc_match.group(1)
+
+    layer0_result = await intercept_via_dm(
+        reel_url=info.get("webpage_url", ""),
+        reel_shortcode=shortcode,
+        creator_username=handle
+    )
+    if layer0_result:
+        logger.info(f"[RESOLVER] Layer 0 SUCCESS: Found link via DM bot → {layer0_result['url']}")
+        layer0_result["winner_layer"] = "dm_bot"
+        return layer0_result
 
     # ── TIER 1: Instant layers ──────────────────────────────────────────────
     tier1_layers = [

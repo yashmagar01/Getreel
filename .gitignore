@@ -52,3 +52,4 @@ desktop.ini
 # ── Cookies / Auth ───────────────────────────────────────────────────────────
 cookies.txt
 *.cookies
+ig_session.json
