@@ -230,7 +230,7 @@ export default function Home() {
         {!isLoading && (
           <footer className="w-full py-16 text-center text-gray-600 text-xs mt-12 space-y-2 border-t border-white/5">
             <p>Reel Decoder — No follows. No comments. No waiting.</p>
-            <p className="opacity-50 font-medium">Whisper AI · Gemini 1.5 · Llama 3.3</p>
+            <p className="opacity-50 font-medium">Whisper AI · Gemini 1.5 · Llama 4 Scout</p>
           </footer>
         )}
       </div>

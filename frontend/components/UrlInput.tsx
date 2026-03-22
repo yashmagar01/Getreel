@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 // Remove unused AnalyzeResult import
 
@@ -24,7 +24,11 @@ export default function UrlInput({ onSubmit, isLoading, error: externalError }: 
     setLocalError("");
 
     const trimmed = url.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setLocalError("Please enter an Instagram Reel URL to decode.");
+      inputRef.current?.focus();
+      return;
+    }
 
     // Robust check: does it contain 'instagram.com/reel/'?
     if (!INSTAGRAM_REEL_REGEX.test(trimmed)) {
@@ -36,7 +40,13 @@ export default function UrlInput({ onSubmit, isLoading, error: externalError }: 
     onSubmit(trimmed);
   };
 
-  const isButtonEnabled = !isLoading && url.trim().length > 0;
+  // Prevent hydration mismatch: only enable button after component mounts
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isButtonEnabled = mounted && !isLoading && url.trim().length > 0;
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-3">

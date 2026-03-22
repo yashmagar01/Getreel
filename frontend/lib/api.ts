@@ -26,6 +26,21 @@ export interface ProgressEvent {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+function sanitizeErrorMessage(message: string): string {
+  if (!message) return "An unexpected error occurred.";
+  
+  // Replace technical Instagram/cookie messages
+  if (message.includes("cookies.txt") || message.includes("Instagram is rate-limiting") || message.includes("expired")) {
+    return "Instagram access is currently limited. Please try again in a few minutes.";
+  }
+  
+  if (message.includes("instagrapi") || message.includes("Login required")) {
+    return "System maintenance in progress. Please try again later.";
+  }
+
+  return message;
+}
+
 export async function analyzeReel(
   instagramUrl: string,
   onProgress: (event: ProgressEvent) => void
@@ -49,7 +64,7 @@ export async function analyzeReel(
     } catch {
       // ignore parse error
     }
-    throw new Error(detail);
+    throw new Error(sanitizeErrorMessage(detail));
   }
 
   const { job_id } = await response.json();
@@ -68,7 +83,7 @@ export async function analyzeReel(
           resolve(event);
         } else if (event.type === "error") {
           eventSource.close();
-          reject(new Error(event.message || "Pipeline error"));
+          reject(new Error(sanitizeErrorMessage(event.message || "Pipeline error")));
         }
       } catch (err) {
         eventSource.close();

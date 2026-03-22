@@ -60,7 +60,7 @@ def download_reel(url: str, temp_dir: str) -> dict:
             raise Exception("This reel is from a private account. Only public reels are supported.")
         
         if "login" in msg or "rate-limit" in msg or "429" in msg:
-            raise Exception("Instagram is rate-limiting or your cookies.txt has expired. Please refresh your cookies.")
+            raise Exception("Instagram is currently limiting access. Please try again in a few minutes.")
             
         if "empty media response" in msg:
             raise Exception("This reel could not be fetched — it may be a collaborative post or age-restricted content.")
@@ -69,7 +69,7 @@ def download_reel(url: str, temp_dir: str) -> dict:
             raise Exception("This reel no longer exists or has been removed.")
             
         raise Exception(
-            f"Could not download this reel. Try refreshing cookies.txt. Details: {e}"
+            f"Could not download this reel. Instagram access is restricted. Details: {e}"
         )
 
     if not os.path.exists(video_path):

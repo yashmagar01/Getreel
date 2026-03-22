@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 const STAGES = [
-  { key: "rate_limit",  label: "Checking rate limits",             step: 1 },
+  { key: "rate_limit",  label: "Waking up engine & checking limits",    step: 1 },
   { key: "cache",       label: "Checking cache",                   step: 2 },
   { key: "download",   label: "Downloading reel from Instagram",  step: 3 },
   { key: "transcribe", label: "Transcribing audio",               step: 4 },
