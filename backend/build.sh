@@ -5,6 +5,9 @@ set -o errexit
 # Install Python dependencies
 pip install -r requirements.txt
 
+# Install Playwright browsers
+playwright install chromium
+
 # Download and install ffmpeg
 if [ ! -d "bin" ]; then
   mkdir -p bin
