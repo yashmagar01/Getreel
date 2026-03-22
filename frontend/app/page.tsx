@@ -25,14 +25,14 @@ export default function Home() {
     setCurrentStage("rate_limit");
 
     try {
-      const result = await analyzeReel(url, (event) => {
+      const res = await analyzeReel(url, (event) => {
         if (event.type === "progress" && event.stage) {
           setCurrentStage(event.stage);
         }
       });
 
-      setResult(result);
-      setDownloadToken(result.download_token ?? null);
+      setResult(res);
+      setDownloadToken(res.download_token ?? null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
@@ -66,7 +66,7 @@ export default function Home() {
       </div>
 
       <div className="relative z-10">
-        
+
         {/* VIEW 1: IDLE / INPUT */}
         {!result && !isLoading && (
           <div className="flex flex-col items-center px-4 py-20 md:py-32 max-w-4xl mx-auto">
@@ -87,7 +87,7 @@ export default function Home() {
 
             <p className="text-gray-400 text-center text-base md:text-lg max-w-lg mb-12 leading-relaxed animate-in fade-in delay-200 duration-700">
               Paste any Instagram Reel URL. We reverse-engineer the creator&apos;s{" "}
-              <span className="text-gray-300">&quot;follow & comment&quot;</span> trick and give you the
+              <span className="text-gray-300">&quot;follow &amp; comment&quot;</span> trick and give you the
               complete step-by-step roadmap — instantly.
             </p>
 
@@ -122,7 +122,7 @@ export default function Home() {
         {/* VIEW 3: RESULT */}
         {result && !isLoading && (
           <div className="animate-in fade-in duration-1000">
-            
+
             {/* STICKY HEADER BAR */}
             <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-gray-950/80 backdrop-blur-md">
               <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -135,9 +135,9 @@ export default function Home() {
                   </svg>
                   <span>Decode another</span>
                 </button>
-                
+
                 <div className="flex items-center gap-2">
-                  <button 
+                  <button
                     onClick={handleCopyMarkdown}
                     className="hidden sm:flex text-xs px-4 py-2 rounded-lg border border-white/10 hover:bg-white/5 transition-all text-gray-300 font-medium"
                   >
@@ -152,31 +152,31 @@ export default function Home() {
             </header>
 
             <div className="max-w-6xl mx-auto px-4 py-10 md:py-16 space-y-12">
-              
+
               {/* HERO SECTION */}
               <section className="fade-up w-full rounded-3xl p-8 md:p-12 relative overflow-hidden bg-gradient-to-br from-violet-600 to-indigo-700 shadow-2xl shadow-violet-500/20">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 pointer-events-none" />
                 <div className="relative z-10 flex flex-col items-center md:items-start text-center md:text-left gap-6">
-                   <div className="px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-bold uppercase tracking-widest">
-                      🎯 Targeted Result
-                   </div>
-                   <h2 className="text-2xl md:text-5xl font-black text-white leading-tight">
-                      {result.concept?.topic || "What this reel is actually teaching"}
-                   </h2>
-                   <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-                      {result.concept?.target_audience && (
-                        <div className="px-3 py-1.5 rounded-lg bg-gray-900/30 border border-white/10 text-white/90 text-sm flex items-center gap-2">
-                           <span className="opacity-60">Audience:</span>
-                           <span className="font-semibold">{result.concept.target_audience}</span>
-                        </div>
-                      )}
-                      {result.concept?.tools_mentioned?.[0] && (
-                        <div className="px-3 py-1.5 rounded-lg bg-gray-900/30 border border-white/10 text-white/90 text-sm flex items-center gap-2">
-                           <span className="opacity-60">Key Tool:</span>
-                           <span className="font-semibold">{result.concept.tools_mentioned[0]}</span>
-                        </div>
-                      )}
-                   </div>
+                  <div className="px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-bold uppercase tracking-widest">
+                    🎯 Targeted Result
+                  </div>
+                  <h2 className="text-2xl md:text-5xl font-black text-white leading-tight">
+                    {result.concept?.topic || "What this reel is actually teaching"}
+                  </h2>
+                  <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+                    {result.concept?.target_audience && (
+                      <div className="px-3 py-1.5 rounded-lg bg-gray-900/30 border border-white/10 text-white/90 text-sm flex items-center gap-2">
+                        <span className="opacity-60">Audience:</span>
+                        <span className="font-semibold">{result.concept.target_audience}</span>
+                      </div>
+                    )}
+                    {result.concept?.tools_mentioned?.[0] && (
+                      <div className="px-3 py-1.5 rounded-lg bg-gray-900/30 border border-white/10 text-white/90 text-sm flex items-center gap-2">
+                        <span className="opacity-60">Key Tool:</span>
+                        <span className="font-semibold">{result.concept.tools_mentioned[0]}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -184,16 +184,16 @@ export default function Home() {
               <section className="grid grid-cols-1 md:grid-cols-[1fr_380px] gap-8">
                 {/* PROMISED LINK */}
                 <div className="w-full h-full min-h-[220px]">
-                   {result.promised_link ? (
-                     <div className="h-full">
-                       <PromisedLinkCTA link={result.promised_link} />
-                     </div>
-                   ) : (
-                     <div className="fade-up h-full flex flex-col items-center justify-center p-8 rounded-2xl bg-gray-900/40 border border-dashed border-white/10 text-gray-500 text-center space-y-3" style={{ animationDelay: '100ms' }}>
-                        <div className="text-3xl opacity-30">🔗</div>
-                        <p className="text-sm">No specific link was mentioned in this reel.</p>
-                     </div>
-                   )}
+                  {result.promised_link ? (
+                    <div className="h-full">
+                      <PromisedLinkCTA link={result.promised_link} />
+                    </div>
+                  ) : (
+                    <div className="fade-up h-full flex flex-col items-center justify-center p-8 rounded-2xl bg-gray-900/40 border border-dashed border-white/10 text-gray-500 text-center space-y-3" style={{ animationDelay: '100ms' }}>
+                      <div className="text-3xl opacity-30">🔗</div>
+                      <p className="text-sm">No specific link was mentioned in this reel.</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* DOWNLOAD BOX */}
@@ -211,14 +211,14 @@ export default function Home() {
               {/* REMAINING ROADMAP SECTIONS */}
               <section className="space-y-6">
                 <div className="flex items-center gap-4 mb-8">
-                   <div className="h-px flex-1 bg-white/5" />
-                   <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">The Deep Dive</h3>
-                   <div className="h-px flex-1 bg-white/5" />
+                  <div className="h-px flex-1 bg-white/5" />
+                  <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">The Deep Dive</h3>
+                  <div className="h-px flex-1 bg-white/5" />
                 </div>
-                <RoadmapDisplay 
-                  roadmap={result.roadmap || ""} 
-                  fromCache={result.from_cache || false} 
-                  skipFirst={true} 
+                <RoadmapDisplay
+                  roadmap={result.roadmap || ""}
+                  fromCache={result.from_cache || false}
+                  skipFirst={true}
                 />
               </section>
 

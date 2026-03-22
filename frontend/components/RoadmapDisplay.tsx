@@ -6,6 +6,7 @@ interface RoadmapDisplayProps {
   roadmap: string;
   fromCache?: boolean;
   skipFirst?: boolean;
+  singleSection?: string;
 }
 
 interface ParsedSection {
@@ -232,12 +233,15 @@ function ResourcesSection({ content, delay }: { content: string; delay: string }
   );
 }
 
-export default function RoadmapDisplay({ roadmap, fromCache, skipFirst }: RoadmapDisplayProps) {
+export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSection }: RoadmapDisplayProps) {
   const sections = parseSections(roadmap);
 
   const renderSection = (section: ParsedSection, index: number) => {
     // Determine delay for fade-up (index * 80ms)
     const delay = `${index * 80}ms`;
+
+    // If singleSection is specified, only render that section
+    if (singleSection && section.title !== singleSection) return null;
 
     if (skipFirst && section.title === "What This Reel Is Actually Teaching") return null;
 

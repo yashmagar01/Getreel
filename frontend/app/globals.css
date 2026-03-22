@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* ── Design Tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --surface-1: #0a0a0f;
+  --surface-2: #111118;
+  --surface-3: #1a1a24;
+  --surface-4: #22222e;
+
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-default: rgba(255,255,255,0.10);
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+
+  --accent-purple: #8B5CF6;
+  --accent-purple-dim: rgba(139,92,246,0.15);
+  --accent-teal: #14B8A6;
+  --accent-green: #22c55e;
+  --accent-red: #ef4444;
+  --accent-amber: #f59e0b;
+
+  --gradient-cta: linear-gradient(135deg, #7C3AED, #EC4899);
+}
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;
@@ -13,6 +37,8 @@
     font-family: var(--font-inter), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: var(--surface-1);
+    color: var(--text-primary);
   }
 
   /* Custom scrollbar */
@@ -20,7 +46,7 @@
     width: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0a0a0f;
+    background: var(--surface-1);
   }
   ::-webkit-scrollbar-thumb {
     background: #374151;
@@ -31,41 +57,34 @@
   }
 }
 
-/* Tailwind v4 animate-in utilities */
+/* ── Animations & Utilities ─────────────────────────────────────────────────── */
 @layer utilities {
+
+  /* ── Tailwind animate-in ── */
   .animate-in {
     animation-name: enter;
     animation-duration: 0.3s;
     animation-fill-mode: both;
   }
 
-  .fade-in {
-    --tw-enter-opacity: 0;
-  }
-
-  .slide-in-from-top-1 {
-    --tw-enter-translate-y: -4px;
-  }
-
-  .slide-in-from-left-2 {
-    --tw-enter-translate-x: -8px;
-  }
-
-  .slide-in-from-bottom-4 {
-    --tw-enter-translate-y: 16px;
-  }
+  .fade-in { --tw-enter-opacity: 0; }
+  .slide-in-from-top-1 { --tw-enter-translate-y: -4px; }
+  .slide-in-from-left-2 { --tw-enter-translate-x: -8px; }
+  .slide-in-from-bottom-4 { --tw-enter-translate-y: 16px; }
 
   .duration-200 { animation-duration: 200ms; }
   .duration-300 { animation-duration: 300ms; }
   .duration-500 { animation-duration: 500ms; }
+  .duration-700 { animation-duration: 700ms; }
+  .duration-1000 { animation-duration: 1000ms; }
+
+  .delay-200 { animation-delay: 200ms; }
+  .delay-500 { animation-delay: 500ms; }
 
   @keyframes enter {
     from {
       opacity: var(--tw-enter-opacity, 1);
-      transform: translate(
-        var(--tw-enter-translate-x, 0),
-        var(--tw-enter-translate-y, 0)
-      );
+      transform: translate(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0));
     }
     to {
       opacity: 1;
@@ -73,12 +92,7 @@
     }
   }
 
-  /* Stage card transition in LoadingState */
-  .stage-card {
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  /* Result sections fade up on mount */
+  /* ── Fade Up ── */
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(16px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -87,7 +101,7 @@
     animation: fadeUp 0.4s ease forwards;
   }
 
-  /* Shimmer for current loading stage */
+  /* ── Shimmer ── */
   @keyframes shimmer {
     0%   { background-position: -200% 0; }
     100% { background-position:  200% 0; }
@@ -96,5 +110,54 @@
     background: linear-gradient(90deg, transparent 25%, rgba(139,92,246,0.15) 50%, transparent 75%);
     background-size: 200% 100%;
     animation: shimmer 1.8s infinite;
+  }
+
+  /* ── Radar sweep ── */
+  @keyframes radarSweep {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .radar-sweep {
+    animation: radarSweep 3s linear infinite;
+    transform-origin: 60px 60px;
+  }
+
+  /* ── Dot orbits ── */
+  @keyframes orbit1 {
+    from { transform: rotate(0deg) translateX(28px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(28px) rotate(-360deg); }
+  }
+  @keyframes orbit2 {
+    from { transform: rotate(180deg) translateX(44px) rotate(-180deg); }
+    to   { transform: rotate(540deg) translateX(44px) rotate(-540deg); }
+  }
+  .orbit-dot-1 {
+    animation: orbit1 4s linear infinite;
+  }
+  .orbit-dot-2 {
+    animation: orbit2 6.5s linear infinite;
+  }
+
+  /* ── Quote fade ── */
+  @keyframes quoteFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .quote-fade {
+    animation: quoteFadeIn 0.5s ease forwards;
+  }
+
+  /* ── Completion scale-in ── */
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  .scale-in {
+    animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+
+  /* ── Stage card transition ── */
+  .stage-card {
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

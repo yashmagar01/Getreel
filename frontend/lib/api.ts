@@ -9,6 +9,7 @@ export interface Concept {
   topic: string;
   target_audience: string;
   tools_mentioned: string[];
+  what_creator_withholds?: string;
 }
 
 export interface ProgressEvent {
