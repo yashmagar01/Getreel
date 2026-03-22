@@ -140,7 +140,7 @@ async def analyze(request: AnalyzeRequest, req: Request):
         logger.info(f"Concept: {concept.get('topic', concept.get('skill_taught', 'unknown'))}")
 
         # ── 6. Find promised link (all layers) ───────────────────────────────
-        promised_link = find_promised_link(info, transcript, concept, comments=comments)
+        promised_link = find_promised_link(info, transcript, concept, comments=comments, caption=description)
         if promised_link:
             logger.info(
                 f"Promised link found via [{promised_link.get('source', 'unknown')}] "

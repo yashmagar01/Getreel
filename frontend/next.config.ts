@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     unoptimized: true,
     remotePatterns: [],
   },
-  allowedDevOrigins: ['localhost', '192.168.56.1'],
+  allowedDevOrigins: ['localhost', '[IP_ADDRESS]'],
 };
 
 export default nextConfig;
