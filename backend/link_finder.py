@@ -29,6 +29,7 @@ import re
 import json
 import time
 import random
+import asyncio
 import logging
 import httpx
 
@@ -215,9 +216,15 @@ def _concept_keywords(concept: dict) -> set[str]:
 def extract_handle_from_url(info: dict) -> str:
     """
     Extract the @username from whatever yt-dlp gives us.
-    Priority: uploader_url/channel_url regex > uploader_id if non-numeric.
+    Priority: channel > uploader_url/channel_url regex > uploader_id if non-numeric.
     Returns empty string if no reliable handle found.
     """
+    # CHECK THIS FIRST — yt-dlp often populates "channel" with the actual username
+    channel = info.get("channel", "")
+    if channel and not channel.isdigit() and channel not in ("reel", "p", "tv", "stories"):
+        logger.info(f"[HANDLE] Extracted from info['channel']: {channel!r}")
+        return channel
+
     # Try extracting from profile URL fields
     for field in ["uploader_url", "channel_url"]:
         url = info.get(field, "") or ""
@@ -334,46 +341,283 @@ def resolve_aggregator(url: str, concept: dict = None) -> str | None:
 # ── DDG safe wrapper with retry ───────────────────────────────────────────────
 
 DDG_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/119.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/118.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
 ]
 
 
 def _safe_ddg_search(query: str, max_results: int = 5) -> list[dict]:
     """
-    DuckDuckGo search with retry + jitter + UA rotation.
-    Returns a list of result dicts, or [] on failure.
+    Search using Serper (if API key is present) or DuckDuckGo as fallback.
     """
+    serper_key = os.getenv("SERPER_API_KEY")
+    if serper_key:
+        logger.info(f"[SERPER] Searching: {query[:80]!r}")
+        try:
+            import httpx
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    "https://google.serper.dev/search",
+                    headers={"X-API-KEY": serper_key, "Content-Type": "application/json"},
+                    json={"q": query, "num": max_results}
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                results = [
+                    {"href": r.get("link", ""), "title": r.get("title", ""), "body": r.get("snippet", "")}
+                    for r in data.get("organic", [])
+                ]
+                logger.info(f"[SERPER] Got {len(results)} results")
+                return results
+            else:
+                logger.warning(f"[SERPER] API returned status {resp.status_code}")
+        except Exception as e:
+            logger.error(f"[SERPER] Error: {e}. Falling back to DDG.")
+    else:
+        logger.info("[DDG] SERPER_API_KEY not found. Using DuckDuckGo")
+
+    # DuckDuckGo Fallback logic
     try:
         from duckduckgo_search import DDGS
+        from duckduckgo_search.exceptions import DuckDuckGoSearchException
     except ImportError:
         logger.warning("[DDG] duckduckgo-search not installed")
         return []
 
+    logger.info(f"[DDG] Searching: {query[:80]!r}")
+
     for attempt in range(3):
         if attempt > 0:
             wait = random.uniform(3.0, 8.0) * attempt
-            logger.info(f"[DDG] Retry {attempt}/2 — waiting {wait:.1f}s")
+            logger.info(f"[DDG] Rate limited — waiting {wait:.1f}s (attempt {attempt+1}/3)")
             time.sleep(wait)
 
         try:
             ua = random.choice(DDG_USER_AGENTS)
             with DDGS(headers={"User-Agent": ua}) as ddgs:
                 results = list(ddgs.text(query, max_results=max_results))
-                logger.info(f"[DDG] Query '{query[:60]}' returned {len(results)} results")
-                return results
-        except Exception as e:
-            err_str = str(e)
-            if "202" in err_str or "Ratelimit" in err_str or "rate" in err_str.lower():
-                logger.warning(f"[DDG] Rate limited on attempt {attempt+1}: {e}")
+                if results:
+                    logger.info(f"[DDG] Got {len(results)} results on attempt {attempt+1}")
+                    return results
+                else:
+                    logger.info(f"[DDG] Empty results on attempt {attempt+1}")
+        except DuckDuckGoSearchException as e:
+            err = str(e)
+            if "Ratelimit" in err or "202" in err or "429" in err:
+                logger.warning(f"[DDG] Rate limited (attempt {attempt+1}): {err[:80]}")
             else:
-                logger.error(f"[DDG] Search error (non-ratelimit): {e}")
-                return []
+                logger.error(f"[DDG] Search exception (attempt {attempt+1}): {err[:120]}")
+                break  # Non-rate-limit error, don't retry
+        except Exception as e:
+            logger.error(f"[DDG] Unexpected error (attempt {attempt+1}): {e}")
+            break
 
-    logger.warning("[DDG] All retry attempts exhausted.")
+    # All attempts exhausted — try DDG Instant Answer API as fallback
+    logger.info(f"[DDG] HTML scraping failed — trying Instant Answer API")
+    try:
+        import httpx
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.get(
+                "https://api.duckduckgo.com/",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "no_html": "1",
+                    "skip_disambig": "1",
+                    "t": "ReelDecoder",
+                },
+                headers={"User-Agent": random.choice(DDG_USER_AGENTS)},
+            )
+            data = resp.json()
+            results = []
+            if data.get("AbstractURL"):
+                results.append({
+                    "href": data["AbstractURL"],
+                    "title": data.get("Heading", ""),
+                    "body": data.get("Abstract", ""),
+                })
+            for topic in data.get("RelatedTopics", [])[:4]:
+                if isinstance(topic, dict) and topic.get("FirstURL"):
+                    results.append({
+                        "href": topic["FirstURL"],
+                        "title": topic.get("Text", ""),
+                        "body": "",
+                    })
+            if results:
+                logger.info(f"[DDG Instant] Got {len(results)} results")
+                return results
+    except Exception as e:
+        logger.warning(f"[DDG Instant] Fallback failed: {e}")
+
+    logger.warning(f"[DDG] All attempts and fallback exhausted for: {query[:60]!r}")
     return []
+
+
+async def _check_youtube_crossref(uploader_name: str, topic: str) -> dict | None:
+    if not uploader_name:
+        return None
+
+    query = f"{uploader_name} YouTube {' '.join(topic.split()[:3])}"
+    logger.info(f"[L6] YouTube crossref search: {query!r}")
+
+    try:
+        results = _safe_ddg_search(query, max_results=5)
+        if not results:
+            logger.info("[L6] No DDG results")
+            return None
+
+        yt_channel_urls = [
+            r["href"] for r in results
+            if isinstance(r.get("href"), str) and (
+                "youtube.com/@" in r["href"] or
+                "youtube.com/c/" in r["href"] or
+                "youtube.com/channel/" in r["href"]
+            )
+        ]
+
+        if not yt_channel_urls:
+            logger.info("[L6] No YouTube channel URLs in results")
+            return None
+
+        channel_url = yt_channel_urls[0]
+        logger.info(f"[L6] Found YouTube channel: {channel_url}")
+
+        import yt_dlp as ytdlp
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": True,
+            "playlist_items": "0",
+        }
+        loop = asyncio.get_event_loop()
+
+        def _extract():
+            with ytdlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(channel_url, download=False)
+
+        info = await asyncio.wait_for(
+            loop.run_in_executor(None, _extract),
+            timeout=15.0
+        )
+
+        if not info:
+            return None
+
+        for field in ["uploader_url", "channel_url"]:
+            url = info.get(field, "")
+            if (url and
+                "youtube.com" not in url and
+                "instagram.com" not in url and
+                not is_junk_url(url)):
+                logger.info(f"[L6] External link via '{field}': {url}")
+                return {
+                    "url": url,
+                    "source": "youtube_crossref",
+                    "confidence": "medium",
+                }
+
+        import re
+        description = info.get("description", "")
+        if description:
+            for url in re.findall(r'https?://[^\s\)\]\"\']+', description):
+                url = url.rstrip(".,;!?)")
+                if (url and
+                    "youtube.com" not in url and
+                    "instagram.com" not in url and
+                    not is_junk_url(url)):
+                    logger.info(f"[L6] URL in channel description: {url}")
+                    return {
+                        "url": url,
+                        "source": "youtube_crossref_description",
+                        "confidence": "low",
+                    }
+
+        logger.info("[L6] No external URL on YouTube channel")
+        return None
+
+    except asyncio.TimeoutError:
+        logger.warning("[L6] Timed out after 15s")
+        return None
+    except Exception as e:
+        logger.error(f"[L6] Error: {type(e).__name__}: {e}")
+        return None
+
+
+async def _check_wayback_bio(handle: str) -> dict | None:
+    if not handle or handle.isdigit():
+        logger.info("[L7] Skipping — no valid handle")
+        return None
+
+    import time, re
+    ninety_days_ago = time.strftime(
+        "%Y%m%d", time.gmtime(time.time() - 90 * 86400)
+    )
+    cdx_url = (
+        f"https://web.archive.org/cdx/search/cdx"
+        f"?url=instagram.com/{handle}"
+        f"&output=json&limit=3&fl=timestamp,original"
+        f"&from={ninety_days_ago}&filter=statuscode:200&collapse=urlkey"
+    )
+
+    logger.info(f"[L7] Wayback CDX query for @{handle}")
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(cdx_url)
+
+        if resp.status_code != 200:
+            logger.warning(f"[L7] CDX API returned {resp.status_code}")
+            return None
+
+        rows = resp.json()
+        if len(rows) < 2:
+            logger.info(f"[L7] No snapshots for @{handle}")
+            return None
+
+        timestamp, original = rows[1]
+        archived_url = f"https://web.archive.org/web/{timestamp}/{original}"
+        logger.info(f"[L7] Snapshot from {timestamp}: {archived_url}")
+
+        async with httpx.AsyncClient(
+            timeout=12.0,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; ReelDecoder/1.0)"}
+        ) as client:
+            page_resp = await client.get(archived_url)
+
+        if page_resp.status_code != 200:
+            return None
+
+        html = page_resp.text
+        patterns = [
+            r'"external_url"\s*:\s*"(https?://[^"]+)"',
+            r'window\._sharedData.*?"external_url"\s*:\s*"([^"]+)"',
+        ]
+
+        for pattern in patterns:
+            for url in re.findall(pattern, html):
+                url = url.rstrip(".,;!?)")
+                if url and not is_junk_url(url) and "instagram.com" not in url:
+                    logger.info(f"[L7] Found bio URL: {url}")
+                    return {
+                        "url": url,
+                        "source": "wayback_bio",
+                        "confidence": "low",
+                        "snapshot_timestamp": timestamp,
+                    }
+
+        logger.info("[L7] No external_url in snapshot")
+        return None
+
+    except asyncio.TimeoutError:
+        logger.warning("[L7] Timed out")
+        return None
+    except Exception as e:
+        logger.error(f"[L7] Error: {type(e).__name__}: {e}")
+        return None
 
 
 # ── Layer -1: Comment mining (Phase 0F) ───────────────────────────────────────
@@ -707,7 +951,22 @@ def _get_instaloader():
                 save_metadata=False,
                 compress_json=False,
                 quiet=True,
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                )
             )
+            cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
+            if cookies_path and os.path.exists(cookies_path):
+                try:
+                    import http.cookiejar
+                    cj = http.cookiejar.MozillaCookieJar(cookies_path)
+                    cj.load(ignore_discard=True, ignore_expires=True)
+                    _instaloader_instance.context._session.cookies.update(cj)
+                    logger.info(f"[INSTALOADER] Ingested cookies from {cookies_path}")
+                except Exception as e:
+                    logger.warning(f"[INSTALOADER] Failed to ingest cookies: {e}")
             logger.info("[INSTALOADER] Instance created")
         except ImportError:
             logger.warning("[INSTALOADER] instaloader not installed — Tier B unavailable")
@@ -785,11 +1044,15 @@ def _layer_3c_ytdlp_profile(handle: str) -> dict | None:
 
     try:
         import yt_dlp
+        cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": True,
         }
+        if cookies_path and os.path.exists(cookies_path):
+            ydl_opts["cookiefile"] = cookies_path
+            logger.info(f"[L3C] Using cookies from {cookies_path}")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             profile_info = ydl.extract_info(profile_url, download=False)
@@ -860,244 +1123,363 @@ def _check_creator_bio(info: dict, concept: dict) -> dict | None:
 
 # ── Layer 4: Targeted DuckDuckGo Search ───────────────────────────────────────
 
-def _check_targeted_search(info: dict, concept: dict, hints: dict = None) -> dict | None:
-    """
-    Layer 4: Targeted search using creator's display name + Phase 2 hints.
-    hints: optional dict from _check_transcript() containing resource_description,
-           domain_mentions, platform_as_destination.
-    """
-    hints = hints or {}
-    uploader_name = (info.get("uploader") or "").strip()
-    handle_for_search = uploader_name or (info.get("channel") or "").strip()
+RESOURCE_PLATFORMS = [
+    "gumroad.com", "teachable.com", "patreon.com", "kajabi.com",
+    "podia.com", "notion.so", "stan.store", "etsy.com",
+    "substack.com", "ko-fi.com", "buymeacoffee.com",
+    "udemy.com", "skillshare.com", "beehiiv.com",
+]
 
-    logger.info(
-        f"[L4-Targeted] creator={handle_for_search!r} | "
-        f"hints={list(hints.get('_hints', hints).keys()) if hints else []}"
-    )
 
-    if not handle_for_search:
-        logger.info("[L4-Targeted] No usable creator name — skipping")
-        return None
+def build_targeted_queries(uploader_name: str, concept: dict, hints: dict) -> list[str]:
+    creator = uploader_name.strip()
+    if not creator:
+        return []
 
-    topic = (concept.get("topic") or concept.get("skill_taught") or "").strip()
-    withheld_raw = concept.get("what_creator_withholds") or concept.get("withheld_information") or {}
-    withheld_str = (
-        withheld_raw if isinstance(withheld_raw, str)
-        else " ".join(str(v) for v in withheld_raw.values()) if isinstance(withheld_raw, dict)
-        else str(withheld_raw)
-    )
-    withheld_kw = " ".join(withheld_str.split()[:6])
-
-    # Phase 2: extract hints from transcript layer
-    h = hints.get("_hints", hints)  # allow passing raw data dict or wrapped {_hints: data}
-    resource_desc = h.get("resource_description") or ""
-    domain_mentions = h.get("domain_mentions") or []
-    platform_dest = h.get("platform_as_destination") or []
-
-    # Use resource_description from hints if available (more accurate than generic withheld_kw)
-    search_resource = resource_desc or withheld_kw or "guide"
+    # Use domain_mentions from L2 hints — these are actual brand/platform names
+    domain_mentions = hints.get("domain_mentions", [])  # e.g. ["The Feed", "Teachable"]
+    resource_desc = hints.get("resource_description", "")  # e.g. "free DJ course"
+    tools = [t for t in concept.get("tools_mentioned", []) if len(t) > 3]
 
     queries = []
 
-    # Phase 2: if hints mention a specific platform, prioritize that platform
-    for dm in domain_mentions[:2]:
-        dm_clean = dm.lower().strip()
-        # Map platform names to domains for site: queries
-        platform_map = {
-            "gumroad": "gumroad.com", "teachable": "teachable.com",
-            "patreon": "patreon.com", "notion": "notion.so",
-            "kajabi": "kajabi.com", "podia": "podia.com",
-            "etsy": "etsy.com", "substack": "substack.com",
-            "ko-fi": "ko-fi.com", "youtube": "youtube.com",
-            "stan": "stan.store", "beacons": "beacons.ai",
-        }
-        for keyword, domain in platform_map.items():
-            if keyword in dm_clean:
-                queries.append(f'"{handle_for_search}" {search_resource} site:{domain}')
-                break
+    # Query 1: creator + specific brand/platform mentioned in reel
+    for brand in domain_mentions[:2]:
+        queries.append(f'"{creator}" {brand} link')
 
-    # Phase 2: if platform_as_destination mentions YouTube, add YouTube crossref query
-    for p in platform_dest:
-        if "youtube" in p.lower():
-            queries.append(f'"{handle_for_search}" youtube channel')
-            break
+    # Query 2: creator + resource description if present
+    if resource_desc:
+        queries.append(f'"{creator}" {resource_desc}')
 
-    # Standard creator + platform queries
-    for site in RESOURCE_SITES[:4]:
-        queries.append(f'"{handle_for_search}" {search_resource} site:{site}')
-    queries.append(f'"{handle_for_search}" {search_resource}')
-    for site in RESOURCE_SITES[:3]:
-        queries.append(f"{topic} {search_resource} site:{site}")
+    # Query 3: creator + tool + resource
+    for tool in tools[:1]:
+        queries.append(f'"{creator}" {tool} course guide')
 
+    # Fallback
+    if not queries:
+        queries.append(f'"{creator}" free resource link')
+
+    return queries[:4]
+
+
+def score_result(result: dict, uploader_name: str, hints: dict) -> int:
+    """
+    Score a DDG result by relevance to the creator and resource type.
+    Higher score = more likely to be the actual promised link.
+    Returns negative for junk URLs (they should never be returned).
+    """
+    url = result.get("href", "")
+    title = result.get("title", "").lower()
+    body = result.get("body", "").lower()
+
+    if is_junk_url(url):
+        return -100
+
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc.lower().replace("www.", "")
+    score = 0
+
+    # Platform quality tiers
+    if domain in ["gumroad.com", "patreon.com", "stan.store", "ko-fi.com"]:
+        score += 8
+    elif domain in RESOURCE_PLATFORMS:
+        score += 5
+    elif domain in ["linktr.ee", "linkin.bio", "beacons.ai", "campsite.bio"]:
+        score += 4
+
+    # Creator name match (first word is most reliable)
+    creator_words = uploader_name.lower().split()[:2]
+    for word in creator_words:
+        if len(word) > 3 and word in title:
+            score += 5
+        if len(word) > 3 and word in url.lower():
+            score += 4
+
+    # Resource description match from hints
+    resource_desc = hints.get("resource_description", "").lower()
+    if resource_desc and resource_desc in title:
+        score += 4
+    if resource_desc and resource_desc in body:
+        score += 2
+
+    # Penalize low-quality domains
+    low_quality = [
+        "blogspot.com", "wordpress.com", "medium.com",
+        "quora.com", "reddit.com", "pinterest.com",
+    ]
+    if any(lq in domain for lq in low_quality):
+        score -= 8
+
+    return score
+
+
+def _check_targeted_search(info: dict, concept: dict, hints: dict = None) -> dict | None:
+    """
+    Layer 4: Targeted search using creator's display name + intent-aware queries.
+    """
+    hints = hints or {}
+    h = hints.get("_hints", hints)
+    uploader_name = (info.get("uploader") or info.get("channel") or "").strip()
+
+    logger.info(
+        f"[L4-Targeted] creator={uploader_name!r} | "
+        f"hints={h}"
+    )
+
+    if not uploader_name:
+        logger.info("[L4-Targeted] No usable creator name — skipping")
+        return None
+
+    queries = build_targeted_queries(uploader_name, concept, h)
+    if not queries:
+        return None
+
+    all_results = []
     for query in queries:
-        logger.info(f"[L4-Targeted] Query: {query}")
         results = _safe_ddg_search(query, max_results=5)
-        clean = [r for r in results if not any(b in r.get("href", "") for b in SEARCH_BLOCKED)]
-        clean = [r for r in clean if not is_junk_url(r.get("href", ""))]
-        if clean:
-            best = clean[0]
-            body = best.get("body", "")
-            desc = (body[:140] + "…") if len(body) > 140 else body
-            logger.info(f"[L4-Targeted] Found: {best['href']}")
-            return {
-                "url": best["href"],
-                "description": desc or "Best targeted match for this creator and topic.",
-                "source": "targeted_search",
-                "confidence": "medium",
-            }
+        if results:
+            all_results.extend(results)
+            time.sleep(random.uniform(1.5, 3.0))
 
-    logger.info("[L4-Targeted] Nothing found")
-    return None
+    if not all_results:
+        logger.info("[L4-Targeted] All queries returned no results")
+        return None
+
+    # Score all results — return best, not first
+    scored = sorted(
+        all_results,
+        key=lambda r: score_result(r, uploader_name, h),
+        reverse=True
+    )
+    best = scored[0]
+    best_score = score_result(best, uploader_name, h)
+
+    MINIMUM_SCORE_THRESHOLD = 3
+    if best_score < MINIMUM_SCORE_THRESHOLD:
+        logger.info(f"[L4-Targeted] Best score {best_score} below threshold — returning None")
+        return None
+
+    confidence = "high" if best_score >= 10 else "medium" if best_score >= 6 else "low"
+    logger.info(f"[L4-Targeted] Best result (score={best_score}): {best.get('href')}")
+    body = best.get("body", "")
+    desc = (body[:140] + "…") if len(body) > 140 else body
+    return {
+        "url": best.get("href"),
+        "description": desc or "Best targeted match for this creator and topic.",
+        "source": "targeted_search",
+        "confidence": confidence,
+        "search_score": best_score,
+    }
 
 
 # ── Layer 5: Generic DuckDuckGo Search ───────────────────────────────────────
 
-def _check_generic_search(concept: dict, hints: dict = None) -> dict | None:
-    """Layer 5: Broad fallback search. Phase 2: uses hints for better query."""
+def _check_generic_search(info: dict, concept: dict, hints: dict = None) -> dict | None:
+    """
+    Layer 5: Broad fallback search using scored results.
+    """
     hints = hints or {}
-    topic = (concept.get("topic") or concept.get("skill_taught") or "").strip()
-    tools = concept.get("tools_mentioned") or []
-    tools_str = " ".join(tools[:3]) if isinstance(tools, list) else ""
-
-    withheld_raw = concept.get("what_creator_withholds") or ""
-    withheld_str = (
-        withheld_raw if isinstance(withheld_raw, str)
-        else " ".join(str(v) for v in withheld_raw.values()) if isinstance(withheld_raw, dict)
-        else str(withheld_raw)
-    )
-    withheld_kw = " ".join(withheld_str.split()[:4])
-
-    # Phase 2: prefer resource_description from hints over generic withheld_kw
     h = hints.get("_hints", hints)
-    resource_desc = h.get("resource_description") or ""
-    search_kw = resource_desc or withheld_kw
 
-    query = f"{topic} {search_kw} {tools_str} free".strip()
+    uploader_name = (info.get("uploader") or info.get("channel") or "").strip()
+
+    brand = (h.get("domain_mentions") or [""])[0]
+    resource = h.get("resource_description") or ""
+    tools = concept.get("tools_mentioned") or []
+    tool = tools[0] if tools else ""
+
+    parts = [p for p in [uploader_name, brand, resource, tool, "free"] if p.strip()]
+    seen = set()
+    parts_deduped = [x for x in parts if not (x.lower() in seen or seen.add(x.lower()))]
+    query = " ".join(parts_deduped)[:80]
     logger.info(f"[L5-Generic] Query: {query}")
 
     results = _safe_ddg_search(query, max_results=5)
-    clean = [r for r in results if not any(b in r.get("href", "") for b in SEARCH_BLOCKED)]
-    clean = [r for r in clean if not is_junk_url(r.get("href", ""))]
-    if clean:
-        best = clean[0]
-        body = best.get("body", "")
-        desc = (body[:140] + "…") if len(body) > 140 else body
-        logger.info(f"[L5-Generic] Found: {best['href']}")
-        return {
-            "url": best["href"],
-            "description": desc or "Best general match found for this topic.",
-            "source": "generic_search",
-            "confidence": "low",
-        }
+    if not results:
+        logger.info("[L5-Generic] Nothing found")
+        return None
 
-    logger.info("[L5-Generic] Nothing found")
-    return None
+    scored = sorted(
+        results,
+        key=lambda r: score_result(r, "", h),
+        reverse=True
+    )
+    best = scored[0]
+    best_score = score_result(best, "", h)
+
+    MINIMUM_SCORE_THRESHOLD = 2
+    if best_score < MINIMUM_SCORE_THRESHOLD:
+        logger.info(f"[L5-Generic] Best score {best_score} below threshold — returning None")
+        return None
+
+    confidence = "medium" if best_score >= 6 else "low"
+    logger.info(f"[L5-Generic] Best result (score={best_score}): {best.get('href')}")
+    body = best.get("body", "")
+    desc = (body[:140] + "…") if len(body) > 140 else body
+    return {
+        "url": best.get("href"),
+        "description": desc or "Best general match found for this topic.",
+        "source": "generic_search",
+        "confidence": confidence,
+        "search_score": best_score,
+    }
 
 
 # ── Main Entry Point ──────────────────────────────────────────────────────────
 
-def find_promised_link(
-    info: dict,           # full yt-dlp info dict
-    transcript: str,      # whisper transcript
-    concept: dict,        # concept extraction result
-    comments: list = [],  # yt-dlp comments list (Phase 0F)
-    caption: str = "",   # full caption text (Phase 2 — passed to transcript layer)
+async def find_promised_link(
+    info: dict,
+    transcript: str,
+    concept: dict,
+    caption: str = "",
+    comments: list = [],
 ) -> dict | None:
     """
-    Run all layers in priority order with full isolation.
-
-    Architecture:
-    - Each layer is wrapped in its own try/except — one crash cannot kill others
-    - Transcript layer runs OUTSIDE the generic loop so its hints can be
-      extracted and threaded into search layers 4 and 5
-    - DM gate / comment gate / _pure_educational results are returned directly
-      (they are valid outcomes, not nulls)
+    Three-tier parallel link resolver.
+    Tier 1: instant (sequential) — comments, info dict, caption
+    Tier 2: LLM transcript (sequential) — extracts hints for Tier 3
+    Tier 3: network (parallel) — bio, targeted search, YouTube crossref
+    Tier 4: last resort (sequential) — generic search, Wayback Machine
     """
-    logger.info("━━━ Link Finder: Starting 7-layer search ━━━")
-    logger.info(
-        f"[RESOLVER] uploader_id={info.get('uploader_id')} "
-        f"uploader={info.get('uploader')} "
-        f"channel={info.get('channel')}"
-    )
+    uploader_name = info.get("uploader", "")
+    handle = extract_handle_from_url(info)
 
-    uploader_id = info.get("uploader_id", "")
-    hints: dict = {}  # Phase 2: populated by transcript layer, consumed by search layers
+    logger.info(f"[RESOLVER] Starting 3-tier resolution for '{uploader_name}' @{handle}")
 
-    # ── Instant layers (no network, no LLM) ──────────────────────────────────
-    instant_layers = [
-        ("comments",  lambda: _check_comments(comments, uploader_id)),
-        ("info_dict", lambda: _check_info_dict(info)),
-        ("caption",   lambda: _check_caption(info)),
+    # ── TIER 1: Instant layers ──────────────────────────────────────────────
+    tier1_layers = [
+        ("comments",  _check_comments,   (comments, info.get("uploader_id", ""))),
+        ("info_dict", _check_info_dict,   (info,)),
+        ("caption",   _check_caption,     (info,)),
     ]
 
-    for layer_name, layer_fn in instant_layers:
+    for layer_name, layer_fn, layer_args in tier1_layers:
         try:
             logger.info(f"[LAYER:{layer_name}] starting")
-            result = layer_fn()
-            if result:
-                url = result.get("url", "")
-                if is_junk_url(url):
-                    logger.warning(f"[LAYER:{layer_name}] junk URL blocked: {url}")
-                    continue
-                logger.info(f"[LAYER:{layer_name}] SUCCESS: {url}")
+            logger.info(f"[T1:{layer_name}] starting")
+            result = await asyncio.wait_for(
+                asyncio.to_thread(layer_fn, *layer_args), timeout=2.0
+            )
+            if result and not is_junk_url(result.get("url", "")):
                 result["winner_layer"] = layer_name
+                logger.info(f"[T1:{layer_name}] SUCCESS: {result['url']}")
                 return result
-            logger.info(f"[LAYER:{layer_name}] None — continuing")
+            logger.info(f"[T1:{layer_name}] None — continuing")
+        except asyncio.TimeoutError:
+            logger.warning(f"[T1:{layer_name}] TIMEOUT")
         except Exception as e:
-            logger.error(f"[LAYER:{layer_name}] EXCEPTION: {type(e).__name__}: {e} — continuing")
+            logger.error(f"[T1:{layer_name}] EXCEPTION: {e}")
 
-    # ── Transcript layer — run explicitly to extract hints ────────────────────
+    # ── TIER 2: LLM transcript ──────────────────────────────────────────────
+    accumulated_hints = {}
     try:
         logger.info("[LAYER:transcript] starting")
-        t_result = _check_transcript(transcript, caption)
-
-        if t_result:
-            # Gate patterns and explicit URLs are real results — return immediately
-            if t_result.get("type") in ("dm_gate", "comment_gate"):
-                logger.info(f"[LAYER:transcript] Gate detected: type={t_result['type']} keyword={t_result.get('keyword')}")
-                t_result["winner_layer"] = "transcript"
-                return t_result
-
-            if "url" in t_result and not is_junk_url(t_result["url"]):
-                logger.info(f"[LAYER:transcript] SUCCESS: {t_result['url']}")
-                t_result["winner_layer"] = "transcript"
-                return t_result
-
-            # Hints and educational signals — save hints, continue
-            if t_result.get("_hints"):
-                hints = t_result  # pass full dict; search layers unwrap with hints.get('_hints', hints)
-                logger.info(f"[LAYER:transcript] Hints extracted for search layers: {t_result.get('_hints')}")
-
-            if t_result.get("_pure_educational"):
-                logger.info("[LAYER:transcript] Pure educational reel — no resource promised. Continuing to bio layer.")
-        else:
-            logger.info("[LAYER:transcript] None — continuing")
-
+        logger.info("[T2:transcript] starting")
+        t2_result = await asyncio.wait_for(
+            asyncio.to_thread(_check_transcript, transcript, caption),
+            timeout=12.0
+        )
+        if t2_result:
+            if "url" in t2_result and not is_junk_url(t2_result.get("url", "")):
+                t2_result["winner_layer"] = "transcript"
+                logger.info(f"[T2:transcript] SUCCESS: {t2_result['url']}")
+                return t2_result
+            elif "_hints" in t2_result:
+                accumulated_hints = t2_result["_hints"]
+                logger.info(f"[T2:transcript] Hints extracted: {accumulated_hints}")
+            elif t2_result.get("type") in ("dm_gate", "comment_gate"):
+                t2_result["winner_layer"] = "transcript"
+                return t2_result
+        logger.info("[T2:transcript] No URL — proceeding with hints to Tier 3")
+    except asyncio.TimeoutError:
+        logger.warning("[T2:transcript] TIMEOUT — proceeding without hints")
     except Exception as e:
-        logger.error(f"[LAYER:transcript] EXCEPTION: {type(e).__name__}: {e} — continuing")
+        logger.error(f"[T2:transcript] EXCEPTION: {e}")
 
-    # ── Bio + search layers ───────────────────────────────────────────────────
-    late_layers = [
-        ("bio",             lambda: _check_creator_bio(info, concept)),
-        ("targeted_search", lambda: _check_targeted_search(info, concept, hints=hints)),
-        ("generic_search",  lambda: _check_generic_search(concept, hints=hints)),
+    # ── TIER 3: Parallel network layers ─────────────────────────────────────
+    logger.info("[T3] Launching bio + targeted search + YouTube crossref in parallel")
+
+    async def run_layer(name: str, coro) -> tuple[str, dict | None]:
+        logger.info(f"[LAYER:{name}] starting")
+        try:
+            result = await coro
+            if result and not is_junk_url(result.get("url", "")):
+                logger.info(f"[T3:{name}] SUCCESS: {result.get('url')}")
+                return name, result
+            logger.info(f"[T3:{name}] None")
+            return name, None
+        except asyncio.TimeoutError:
+            logger.warning(f"[T3:{name}] TIMEOUT")
+            return name, None
+        except Exception as e:
+            logger.error(f"[T3:{name}] EXCEPTION: {e}")
+            return name, None
+
+    tier3_tasks = [
+        run_layer("bio", asyncio.wait_for(
+            asyncio.to_thread(_check_creator_bio, info, concept),
+            timeout=12.0
+        )),
+        run_layer("targeted_search", asyncio.wait_for(
+            asyncio.to_thread(_check_targeted_search, info, concept, accumulated_hints),
+            timeout=15.0
+        )),
+        run_layer("youtube_crossref", asyncio.wait_for(
+            _check_youtube_crossref(uploader_name, concept.get("topic", "")),
+            timeout=20.0
+        )),
     ]
 
-    for layer_name, layer_fn in late_layers:
+    tier3_results = await asyncio.gather(*tier3_tasks, return_exceptions=False)
+
+    # Sort by confidence and return the best result
+    CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+    valid_results = [
+        (name, r) for name, r in tier3_results
+        if r and isinstance(r, dict) and r.get("url")
+    ]
+    valid_results.sort(
+        key=lambda x: CONFIDENCE_RANK.get(x[1].get("confidence", ""), 0),
+        reverse=True
+    )
+
+    if valid_results:
+        winner_name, winner_result = valid_results[0]
+        winner_result["winner_layer"] = winner_name
+        logger.info(f"[T3] Best result from '{winner_name}': {winner_result['url']}")
+        return winner_result
+
+    logger.info("[T3] All parallel layers returned None — falling to Tier 4")
+
+    # ── TIER 4: Last-resort sequential fallbacks ─────────────────────────────
+    tier4_layers = [
+        ("generic_search", _check_generic_search,
+            (info, concept, accumulated_hints)),
+        ("wayback_bio",    _check_wayback_bio,
+            (handle,)),
+    ]
+
+    for layer_name, layer_fn, layer_args in tier4_layers:
         try:
             logger.info(f"[LAYER:{layer_name}] starting")
-            result = layer_fn()
-            if result:
-                url = result.get("url", "")
-                if is_junk_url(url):
-                    logger.warning(f"[LAYER:{layer_name}] junk URL blocked: {url}")
-                    continue
-                logger.info(f"[LAYER:{layer_name}] SUCCESS: {url}")
+            logger.info(f"[T4:{layer_name}] starting")
+            if asyncio.iscoroutinefunction(layer_fn):
+                coro = layer_fn(*layer_args)
+            else:
+                coro = asyncio.to_thread(layer_fn, *layer_args)
+                
+            result = await asyncio.wait_for(
+                coro, timeout=15.0
+            )
+            if result and not is_junk_url(result.get("url", "")):
                 result["winner_layer"] = layer_name
+                logger.info(f"[T4:{layer_name}] SUCCESS: {result['url']}")
                 return result
-            logger.info(f"[LAYER:{layer_name}] None — continuing")
+            logger.info(f"[T4:{layer_name}] None")
+        except asyncio.TimeoutError:
+            logger.warning(f"[T4:{layer_name}] TIMEOUT")
         except Exception as e:
-            logger.error(f"[LAYER:{layer_name}] EXCEPTION: {type(e).__name__}: {e} — continuing")
+            logger.error(f"[T4:{layer_name}] EXCEPTION: {e}")
 
-    logger.info("[RESOLVER] All layers exhausted — no link found")
+    logger.info("[RESOLVER] All tiers exhausted — no link found")
     return None

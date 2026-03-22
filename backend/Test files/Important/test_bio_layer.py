@@ -108,9 +108,12 @@ def test_all():
 
     print("\nTarget: 5/6 (83%) minimum")
     print("=" * 60)
-    return passed
+    # Pytest warning fix: do not return the score directly
+    global _last_score
+    _last_score = passed
 
 
 if __name__ == "__main__":
-    score = test_all()
-    sys.exit(0 if score >= 5 else 1)
+    _last_score = 0
+    test_all()
+    sys.exit(0 if _last_score >= 5 else 1)

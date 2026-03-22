@@ -5,6 +5,7 @@ import time
 import tempfile
 import shutil
 import logging
+import asyncio
 
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -257,9 +258,13 @@ def test_reel(reel: dict, temp_dir: str) -> dict:
         print(f"     → ERROR: {e}")
 
 
+    # Extract hints from L2 results to pass to L4/L5
+    l2_result = result["layer_results"].get("transcript") or {}
+    layer_hints = l2_result if l2_result.get("_hints") else {}
+
     print("\n[L4] Targeted DuckDuckGo Search:")
     try:
-        result["layer_results"]["targeted_search"] = _check_targeted_search(info, concept)
+        result["layer_results"]["targeted_search"] = _check_targeted_search(info, concept, hints=layer_hints)
         print(f"     → {result['layer_results']['targeted_search']}")
     except Exception as e:
         print(f"     → ERROR: {e}")
@@ -267,7 +272,7 @@ def test_reel(reel: dict, temp_dir: str) -> dict:
 
     print("\n[L5] Generic DuckDuckGo Search:")
     try:
-        result["layer_results"]["generic_search"] = _check_generic_search(concept)
+        result["layer_results"]["generic_search"] = _check_generic_search(info, concept, hints=layer_hints)
         print(f"     → {result['layer_results']['generic_search']}")
     except Exception as e:
         print(f"     → ERROR: {e}")
@@ -278,7 +283,7 @@ def test_reel(reel: dict, temp_dir: str) -> dict:
     print("🔗 FULL PIPELINE RESULT:")
     print("─"*50)
     try:
-        full_result = find_promised_link(info, transcript, concept, comments=comments)
+        full_result = asyncio.run(find_promised_link(info, transcript, concept, comments=comments))
         result["final_result"] = full_result
         if full_result:
             result["winner_layer"] = full_result.get("source", "unknown")

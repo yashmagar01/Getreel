@@ -2,7 +2,7 @@
 
 > **Date:** 22 March 2026  
 > **Author:** Yash (with AI pair-programming assistance)  
-> **Status:** ✅ MVP Working Locally | 🚧 Production Deployment In Progress
+> **Status:** ✅ MVP Working Locally | 🚧 Production Prep (Phase 5 Complete)
 
 ---
 
@@ -25,6 +25,7 @@
 - [API Rate Limits & Restrictions](#-api-rate-limits--restrictions)
 - [Deployment Status](#-deployment-status)
 - [What's Next](#-whats-next)
+- [Summary of Changes Made Today](#-summary-of-changes-made-today-22-march-2026)
 
 ---
 
@@ -67,9 +68,9 @@ The original super prompt described a system using **three different AI provider
 
 | Feature | Description | Status |
 |---|---|---|
-| 🔗 **Promised Link Finder** | 5-layer intelligent link resolver finds the actual URL the creator is gatekeeping | ✅ Built |
-| 🎨 **PromisedLinkCTA Component** | Beautiful UI card with confidence badges showing the found link | ✅ Built |
-| 💬 **Comment Extraction** | Downloads reel comments via yt-dlp to feed into analysis | ✅ Built |
+| 🔗 **Promised Link Finder** | 7-layer/3-tier parallel resolver finds the hidden URL | ✅ Built (Phase 5) |
+| ⚡ **Parallel Architecture** | Concurrent layer execution reduces pipeline time by ~75% | ✅ Built (Phase 5) |
+| 💬 **Comment Extraction** | Downloads reel comments via yt-dlp to feed into analysis | ✅ Built (Phase 0F) |
 | 🔍 **DuckDuckGo Search Integration** | Layers 4 & 5 of link finder use web search as fallback | ✅ Built |
 | ⬇️ **Decode Another Reel Button** | Reset flow to decode multiple reels in one session | ✅ Built |
 
@@ -120,7 +121,7 @@ The original plan called for:
 | **Transcription** | Groq Whisper API | `whisper-large-v3` | Speech-to-text |
 | **Concept Analysis** | Groq Llama 4 Scout | `llama-4-scout-17b-16e-instruct` | Multimodal vision + text analysis |
 | **Roadmap Generation** | Groq Llama 3.3 | `llama-3.3-70b-versatile` | Step-by-step guide writer |
-| **Link Finder** | Custom + DuckDuckGo | `duckduckgo-search 6.2.4` | 5-layer intelligent URL resolver |
+| **Link Finder** | 7-layer / 3-tier Parallel Resolver | `asyncio.gather` | Concurrent 12s-20s resolution |
 | **Database / Cache** | Supabase (PostgreSQL) | Free tier | Result caching + rate limiting |
 | **HTTP Client** | httpx | 0.27.0 | Internal HTTP requests |
 | **Image Processing** | Pillow | 10.3.0 | Frame resizing to 512×512 |
@@ -138,7 +139,8 @@ The original plan called for:
 - [x] **Key Frame Extraction** — 6 frames (or 2 for short videos), resized to 512×512
 - [x] **Multimodal Concept Analysis** — Llama 4 Scout analyzes transcript + frames together
 - [x] **Roadmap Generation** — Llama 3.3 70B creates structured 5-section guide
-- [x] **Promised Link Finder** — 5-layer resolver finds the hidden resource URL
+- [x] **Promised Link Finder** — 7-layer / 3-tier parallel resolver (Phase 5 overhaul complete)
+- [x] **Hard Timeouts** — Per-layer asyncio.wait_for() prevents pipeline hangs
 
 ### Caching & Rate Limiting
 - [x] **URL-based result caching** — SHA-256 hash of URL, stored in Supabase
@@ -179,7 +181,7 @@ The original plan called for:
 | `frame_extractor.py` | 66 | ffmpeg frame extraction at 6 timestamps, Pillow resize, base64 encoding |
 | `analyzer.py` | 108 | Groq Llama 4 Scout multimodal analysis, returns structured JSON concept dict |
 | `roadmap_generator.py` | 111 | Groq Llama 3.3 70B structured guide generation, returns Markdown string |
-| `link_finder.py` | 373 | 5-layer promised link resolver (caption → transcript → bio → targeted search → generic search) |
+| `link_finder.py` | 1467 | 7-layer/3-tier parallel link resolver (comments → bio → search → YT crossref → Wayback) |
 | `cache.py` | 79 | Supabase read/write for result caching with SHA-256 URL hashing |
 | `rate_limiter.py` | 81 | IP-based rate limiting (5 req/hr) via Supabase `rate_limits` table |
 | `requirements.txt` | 14 | All Python dependencies with pinned versions |
@@ -207,15 +209,19 @@ The original plan called for:
 }
 ```
 
-### Promised Link Resolver — 5 Layers
+### Promised Link Resolver — 7 Layers (3-Tier Parallel)
 
-| Priority | Layer | Source | Confidence | How It Works |
-|---|---|---|---|---|
-| 1 | Caption | Reel description text | 🟢 High | Extract URLs from caption via regex, prefer resource domains |
-| 2 | Transcript | Creator's spoken words | 🟢 High | Detect verbally mentioned URLs / domains |
-| 3 | Creator Bio | Instagram profile | 🟡 Medium | Fetch profile HTML, find bio link, follow aggregators (Linktree etc.) |
-| 4 | Targeted Search | DuckDuckGo | 🟡 Medium | `"@handle" topic site:gumroad.com` etc. |
-| 5 | Generic Search | DuckDuckGo | 🔴 Low | `topic tools free guide tutorial` (broad fallback) |
+| Priority | Layer | Source | Confidence | Tier | Notes |
+|---|---|---|---|---|---|
+| -1 | Comments | yt-dlp comment data | 🟢 High | T1 | Sequential, checks creator's own comments |
+| 0 | Info Dict | yt-dlp metadata | 🟢 High | T1 | Sequential, instant URL extraction |
+| 1 | Caption | Description text | 🟢 High | T1 | Sequential, regex URL mining |
+| 2 | Transcript | spoken words | 🟢 High | T2 | Sequential LLM extraction, feeds hints to T3 |
+| 3 | Creator Bio | Instagram profile | 🟡 Medium | T3 | **Parallel**, Instaloader + aggregator resolve |
+| 4 | Targeted Search | DuckDuckGo | 🟡 Medium | T3 | **Parallel**, hints-aware queries + retry |
+| 6 | YouTube Crossref | YouTube channel | 🟡 Medium | T3 | **Parallel**, finds creator's YT links |
+| 5 | Generic Search | DuckDuckGo | 🔴 Low | T4 | Fallback sequential search |
+| 7 | Wayback Bio | Archive.org | 🔴 Low | T4 | Fallback, finds removed bio links |
 
 ---
 
@@ -556,8 +562,8 @@ reel-decoder/
 ## 🔮 What's Next
 
 ### Immediate Priorities
-- [ ] Fix production deployment on Render (cookies + CORS stability)
-- [ ] Verify full end-to-end flow on deployed URLs
+- [ ] Finalize production environment (Serper API key injection)
+- [ ] Run local bio tests against all 6 handles with fresh cookies
 - [ ] Set up UptimeRobot / cron-job.org to prevent Render cold starts
 
 ### Short-Term Improvements
@@ -579,10 +585,12 @@ reel-decoder/
 
 | Change | File(s) Modified | Description |
 |---|---|---|
-| CORS fix for network IP | `backend/.env` | Added `http://192.168.56.1:3000` to `ALLOWED_ORIGINS` |
-| Dev origins fix | `frontend/next.config.ts` | Added `192.168.56.1` to `allowedDevOrigins` |
-| Step parser fix | `frontend/components/RoadmapDisplay.tsx` | Updated `parseSteps()` to support plain numbered lists |
+| **Phase 5 Overhaul** | `link_finder.py` | Implemented 3-tier parallel architecture (asyncio.gather) |
+| **New Signals** | `link_finder.py` | Added Layers 6 + 7 (YouTube crossref + Wayback bio) |
+| **Test Cleanliness** | `conftest.py` | Silenced pytest collection errors for standalone scripts |
+| **Search Prep** | `.env` | Added `SERPER_API_KEY` placeholder |
+| Step parser fix | `RoadmapDisplay.tsx` | Updated `parseSteps()` to support plain numbered lists |
 
 ---
 
-> *This document was generated by auditing every file in the `reel-decoder/` project directory. It reflects the actual state of the codebase as of 22 March 2026, 9:19 AM IST.*
+> *This document was generated by auditing every file in the `reel-decoder/` project directory. It reflects the actual state of the codebase as of 22 March 2026, 4:00 PM IST.*
