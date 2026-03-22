@@ -56,7 +56,7 @@ function parseBullets(text: string): string[] {
     .filter(Boolean);
 }
 
-// Parse numbered steps — handles "1. **Title**: description" format
+// Parse numbered steps — handles "1. **Title**: description" and "1. description" formats
 function parseSteps(
   text: string
 ): { title: string; description: string }[] {
@@ -65,10 +65,15 @@ function parseSteps(
   let current: { title: string; description: string } | null = null;
 
   for (const line of lines) {
-    const match = line.match(/^\d+\.\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
-    if (match) {
+    const matchBold = line.match(/^\d+\.\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
+    const matchPlain = line.match(/^(\d+)\.\s+(.*)/);
+
+    if (matchBold) {
       if (current) steps.push(current);
-      current = { title: match[1].trim(), description: match[2].trim() };
+      current = { title: matchBold[1].trim(), description: matchBold[2].trim() };
+    } else if (matchPlain) {
+      if (current) steps.push(current);
+      current = { title: `Step ${matchPlain[1]}`, description: matchPlain[2].trim() };
     } else if (current && line.trim()) {
       current.description += " " + line.trim();
     }
