@@ -11,3 +11,4 @@ python-multipart==0.0.9
 aiofiles==23.2.1
 Pillow==10.3.0
 duckduckgo-search==6.2.4
+instaloader==4.10.3

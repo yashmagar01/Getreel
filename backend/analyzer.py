@@ -11,6 +11,15 @@ Your job is to analyze an Instagram Reel's transcript and visual frames and iden
 2. What specific information the creator is withholding to force engagement
 3. What a viewer would actually need to know, install, or do to achieve the same result independently
 
+CRITICAL RULES (Phase 0 anti-hallucination fix):
+- Extract ONLY information EXPLICITLY present in the transcript or visible on screen
+- Do NOT infer, extrapolate, guess, or add context not present in the content
+- Do NOT generate brand names, product names, or terms unless they were literally spoken or shown
+- If you are uncertain whether a term was explicitly stated, OMIT IT
+- Return empty lists rather than guessed values
+- NEVER hallucinate URLs, domains, or resource names
+- Your output must be 100% grounded in what was explicitly said or shown
+
 Respond ONLY with a valid JSON object. No markdown, no explanation, just the JSON."""
 
 
@@ -74,7 +83,7 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
                 {"role": "user", "content": content},
             ],
             max_tokens=1000,
-            temperature=0.3,
+            temperature=0,  # Phase 0E: temperature=0 prevents hallucination
         )
     except Exception as e:
         raise Exception(f"Groq concept extraction failed: {str(e)}")

@@ -110,7 +110,14 @@ async def analyze(request: AnalyzeRequest, req: Request):
         video_path = download_result["video_path"]
         audio_path = download_result["audio_path"]
         info       = download_result["info"]          # full yt-dlp dict
+        comments   = info.get("comments") or []        # Phase 0F: pass to Layer -1
+        description = info.get("description") or ""
         logger.info(f"Download complete: {video_path}")
+        # Bug 0C: diagnostics — confirm full caption is flowing through
+        logger.info(f"[MAIN] Caption length from yt-dlp: {len(description)} chars")
+        logger.info(f"[MAIN] Caption preview (first 200): {description[:200]!r}")
+        logger.info(f"[MAIN] Caption tail (last 200): {description[-200:]!r}")
+        logger.info(f"[MAIN] Comments count: {len(comments)}")
 
         # ── 2. Duration guard ──────────────────────────────────────────────
         duration = float(info.get("duration") or 0)
@@ -132,8 +139,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
         concept = analyze_concept(transcript, frames)
         logger.info(f"Concept: {concept.get('topic', concept.get('skill_taught', 'unknown'))}")
 
-        # ── 6. Find promised link (all 5 layers) ──────────────────────────
-        promised_link = find_promised_link(info, transcript, concept)
+        # ── 6. Find promised link (all layers) ───────────────────────────────
+        promised_link = find_promised_link(info, transcript, concept, comments=comments)
         if promised_link:
             logger.info(
                 f"Promised link found via [{promised_link.get('source', 'unknown')}] "

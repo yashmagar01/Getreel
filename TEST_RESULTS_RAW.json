@@ -1,0 +1,295 @@
+[
+  {
+    "reel_url": "https://www.instagram.com/reel/DUHkGtFkQ74/",
+    "description": "Reel where creator puts resource link directly in caption (discount link)",
+    "expected_layer": "caption",
+    "expected_domain_hint": "thefeed.com",
+    "info_summary": {
+      "description": "Going into year 5 with @thefeed! Link in caption for 40% off you first order \u2b07\ufe0f\ud83d\udcaa\ud83d\udd0b...",
+      "uploader": "Savilia Blunk",
+      "uploader_id": "231430803",
+      "comment_count": 0,
+      "duration": 119.0,
+      "webpage_url": "https://www.instagram.com/reel/DUHkGtFkQ74/"
+    },
+    "transcript_preview": "Hey guys, I'm super stoked to announce that I'm going to be moving into my fifth year with The Feed. They've been such a big resource for me over the years, just providing one solid place where I can get all the fuel and nutrition and recovery products that I need. Right now I'm doing a collab with them where you can get 40% off your first order, if you've never used them before, by using the link",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 317.5
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DCh71HqSbFJ/",
+    "description": "Reel where creator puts product / resource link directly in caption",
+    "expected_layer": "caption",
+    "expected_domain_hint": "amazon.com",
+    "info_summary": {
+      "description": "[Review + Link in Caption\u2935\ufe0f] \ud83c\udf4a\ud83c\udf4c\nI don\u2019t usually accept many product collab offers, but I was genuinely so excited to have the chance to collaborate with and animate for the Divoom Pixoo 64!! This LED pixel art display works as a clock, art decor, social media tracker, and for people like me, a displ...",
+      "uploader": "\u2728yuzu\u2728",
+      "uploader_id": "16202590275",
+      "comment_count": 0,
+      "duration": 17.166000366210938,
+      "webpage_url": "https://www.instagram.com/reel/DCh71HqSbFJ/"
+    },
+    "transcript_preview": "I animated my fob characters to keep me company while I study slash draw. The PIXOO 64 is a customizable clock and pixel art display. The divimop lets you draw and animate or import your own pixel art. You can even import any, if you want.",
+    "layer_results": {
+      "info_dict": null,
+      "caption": {
+        "url": "https://collabs.shop/wgagfd",
+        "description": "Found directly in the reel's caption: \"ou can get 10% off your purchase of the Pixoo 64:\nhttps://collabs.shop/wgagfd\nCheckout code: YUZUYOO\"",
+        "source": "caption",
+        "confidence": "high"
+      },
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": {
+      "url": "https://collabs.shop/wgagfd",
+      "description": "Found directly in the reel's caption: \"ou can get 10% off your purchase of the Pixoo 64:\nhttps://collabs.shop/wgagfd\nCheckout code: YUZUYOO\"",
+      "source": "caption",
+      "confidence": "high"
+    },
+    "winner_layer": "caption",
+    "error": null,
+    "time_seconds": 173.0
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DVAzu2pk7lJ/",
+    "description": "Shopping / outfit reel with 'Shop the look \u2014 link in caption'",
+    "expected_layer": "caption",
+    "expected_domain_hint": "firstcryindia.com",
+    "info_summary": {
+      "description": "Shop the look \u2014 link in caption @firstcryindia \n\n  https://fclinks.firstcry.com/obZe/ds4g6xck\n\n#trending \n#ad \n#viralreels \n#reels...",
+      "uploader": "ManpreetSweety",
+      "uploader_id": "46949652415",
+      "comment_count": 0,
+      "duration": 19.062999725341797,
+      "webpage_url": "https://www.instagram.com/reel/DVAzu2pk7lJ/"
+    },
+    "transcript_preview": "My wrist Claws like this, start with a trap Eyes on me, arching my back Just like this, care for the night Don't burn it, just keep watching Claws like this, pull from the back Eyes on me, hang like that Just like this, care for the night Don't burn it, just keep watching Just keep watching",
+    "layer_results": {
+      "info_dict": null,
+      "caption": {
+        "url": "https://fclinks.firstcry.com/obZe/ds4g6xck",
+        "description": "Found directly in the reel's caption: \"hop the look \u2014 link in caption @firstcryindia \n\n  https://fclinks.firstcry.com/obZe/ds4g6xck\n\n#trend\"",
+        "source": "caption",
+        "confidence": "high"
+      },
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": {
+      "url": "https://fclinks.firstcry.com/obZe/ds4g6xck",
+      "description": "Found directly in the reel's caption: \"hop the look \u2014 link in caption @firstcryindia \n\n  https://fclinks.firstcry.com/obZe/ds4g6xck\n\n#trend\"",
+      "source": "caption",
+      "confidence": "high"
+    },
+    "winner_layer": "caption",
+    "error": null,
+    "time_seconds": 199.6
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DWIarSWACKz/",
+    "description": "Creator says 'New Video Out link in bio' to push traffic to external link",
+    "expected_layer": "bio",
+    "expected_domain_hint": "youtube.com",
+    "info_summary": {
+      "description": "New Video Out \ud83e\udd2d link in bio\n\n#viral #youtube #explorepage\u2728 #fyp #foryou...",
+      "uploader": "Kamora B. Reed",
+      "uploader_id": "3037368158",
+      "comment_count": 0,
+      "duration": 59.03300094604492,
+      "webpage_url": "https://www.instagram.com/reel/DWIarSWACKz/"
+    },
+    "transcript_preview": "Mara, who she's heading? You think she's pretty? If you don't, do you need that? Do you need that? I think you need that. I think you need that. Do you need that? Do you? Do you need that? the in and",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 320.8
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DVUphq9kVMd/",
+    "description": "Creator says 'New video out now' and uses #linkinbio #linkinstory",
+    "expected_layer": "bio",
+    "expected_domain_hint": "youtube.com",
+    "info_summary": {
+      "description": "New video out now #linkinbio #linkinstory\u2b06\ufe0f #reels @flicshotya_ \ud83d\udcf8...",
+      "uploader": "DatBoiJug",
+      "uploader_id": "429826970",
+      "comment_count": 0,
+      "duration": 39.79100036621094,
+      "webpage_url": "https://www.instagram.com/reel/DVUphq9kVMd/"
+    },
+    "transcript_preview": "I'm making it big, ayy, yeah for real, that support gotta pick up, y'all gotta start playing, ayy, same clothes, different night, I still got that band right, I still got that same fight, different blood, same price, I wake up and go on the scene, too many of us gotta eat, I ain't been in the church in a minute But on my knees begging God please Side clothes, different night I still got that band ",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 312.6
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DWHaZV5D6N0/",
+    "description": "Short teaser where creator says new video out, 'link in my bio'",
+    "expected_layer": "bio",
+    "expected_domain_hint": "youtube.com",
+    "info_summary": {
+      "description": "New video out now ! Link in my bio \n\n#explorepage #viral #viralreel #youtuber...",
+      "uploader": "Sebriaah",
+      "uploader_id": "253795903",
+      "comment_count": 0,
+      "duration": 29.719999313354492,
+      "webpage_url": "https://www.instagram.com/reel/DWHaZV5D6N0/"
+    },
+    "transcript_preview": "Hey guys, it's me again and today we're about to pimp my ride. You've got to pimp my ride. I feel like my car should represent how I feel on the inside. Really, really excited to put her in or put it in. She's got to come in. Whatever. Ew! What on my lip? Do I have to sew this closed?",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 312.6
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DVzMnxACS7Y/",
+    "description": "Creator talks about new IG feature adding clickable links to reels, mentions linking profiles/reels",
+    "expected_layer": "transcript",
+    "expected_domain_hint": "instagram.com",
+    "info_summary": {
+      "description": "BIG NEW IG UPDATE \ud83d\udea8 \n\nYou can now add clickable links on your reels!\n\nThis is way different than the \u201clink a reel\u201d button when you\u2019re going to post.\n\nClickable links on reels now allows you to add links to a profile or another reel.\n\nBut you have to make sure you\u2019re doing it the right way..\n\nOpen up...",
+      "uploader": "Enrico Incarnati | Social Media Strategy | Content Marketing",
+      "uploader_id": "244143075",
+      "comment_count": 0,
+      "duration": 57.03300094604492,
+      "webpage_url": "https://www.instagram.com/reel/DVzMnxACS7Y/"
+    },
+    "transcript_preview": "Instagram just made a massive update, and you're going to like this one. You can now add clickable links on your Reels so you can get way more views on your videos. But this is way different from the linking Reels update that dropped last year. Let me show you. If you open up the Edits app, start a new project. At the bottom, you'll see a Links option right here, which gives you two options, to li",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 314.2
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DTiy8MKEqux/",
+    "description": "Creator verbally explains adding clickable links using Edits app, mentions linking profiles and reels",
+    "expected_layer": "transcript",
+    "expected_domain_hint": "instagram.com",
+    "info_summary": {
+      "description": "Finally!! You can now add clickable links directly on your Reels using the Edits app. It can be your profile, your friend\u2019s profile, or a public Reel you\u2019re referencing, and it shows up right on the video for easy access.\n\nNo more telling people to check the link in your bio or scroll through commen...",
+      "uploader": "Jen Atkinson | Social Media Strategist & Coach",
+      "uploader_id": "77125528316",
+      "comment_count": 0,
+      "duration": 37.76599884033203,
+      "webpage_url": "https://www.instagram.com/reel/DTiy8MKEqux/"
+    },
+    "transcript_preview": "Okay, so Instagram just dropped a brand new feature, and this one's actually super useful. You can now add clickable links directly on your Reels using the Edit app. You can link to your profile, someone else's Reel, your Reel, or pretty much any public content. And it shows up right on your video as a tappable overlay. This will make it way easier for people to check out what you're talking about",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": null,
+    "time_seconds": 304.6
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DVPopaCDIRG/",
+    "description": "Promotion video saying link in bio; actual external URL not visible in caption text",
+    "expected_layer": "targeted_search",
+    "expected_domain_hint": "any",
+    "info_summary": {},
+    "transcript_preview": "",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": null,
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": null,
+    "winner_layer": null,
+    "error": "Download failed: This reel is from a private account. Only public reels are supported.",
+    "time_seconds": 0
+  },
+  {
+    "reel_url": "https://www.instagram.com/reel/DVLa4JekmEA/",
+    "description": "DJ content teaser; user must infer resource from creator/profile, no explicit URL in caption",
+    "expected_layer": "generic_search",
+    "expected_domain_hint": "any",
+    "info_summary": {
+      "description": "How to Edit Your DJ Content Part 2: \u2060\n\u2060\nIn Part 1 we covered how to film it.\u2060\nNow let\u2019s turn it into clean, repeatable DJ content for Instagram Reels and TikTok.\u2060\n\u2060\nYou don\u2019t need expensive software. Use CapCut (free and user-friendly).\u2060\n\u2060\nSimple structure:\u2060\n\u2060\n\u2022 Import your video + drag in the audio...",
+      "uploader": "Crossfader",
+      "uploader_id": "1936998535",
+      "comment_count": 0,
+      "duration": 59.79999923706055,
+      "webpage_url": "https://www.instagram.com/reel/DVLa4JekmEA/"
+    },
+    "transcript_preview": "How to make DJ content part two. I'm going to show you how to edit a video in this style. There are loads of editing softwares available online but I would recommend the free ones, in particular CapCut. It's free and really user-friendly. All we have to do to get this into CapCut is just drag this into this box on the left hand side. That will then automatically upload the audio onto CapCut. Once ",
+    "layer_results": {
+      "info_dict": null,
+      "caption": null,
+      "transcript": {
+        "url": "https://google.com",
+        "description": "Creator mentioned this platform/domain in the reel.",
+        "source": "transcript",
+        "confidence": "medium"
+      },
+      "bio": null,
+      "targeted_search": null,
+      "generic_search": null
+    },
+    "final_result": {
+      "url": "https://google.com",
+      "description": "Creator mentioned this platform/domain in the reel.",
+      "source": "transcript",
+      "confidence": "medium"
+    },
+    "winner_layer": "transcript",
+    "error": null,
+    "time_seconds": 169.4
+  }
+]
