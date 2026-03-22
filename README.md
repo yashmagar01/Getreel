@@ -1,205 +1,207 @@
-# Reel Decoder
+# 🎬 Reel Decoder
 
-> Paste any Instagram Reel URL. Get the complete step-by-step guide the creator was gatekeeping. No follows. No comments. No waiting.
+> **Get the actual guide, not the teaser.**
 
-Reel Decoder is a full-stack AI pipeline that reverse-engineers the "follow & comment for the link" pattern used by Instagram creators. It downloads the reel, transcribes the audio, extracts key frames, identifies what the creator is teaching (and withholding), hunts down the promised resource link across 8 signal layers, and generates a complete actionable roadmap — all in under 60 seconds.
+Reel Decoder reverse-engineers Instagram "teaser reels" — the ones where creators show you something valuable and then say *"follow and comment to get the full guide."* Instead of playing that game, paste the URL and get a complete step-by-step breakdown in seconds.
 
----
-
-## How It Works
-
-```
-Instagram URL
-     │
-     ▼
-┌─────────────────────────────────────────────────────────┐
-│                    8-Stage Pipeline                      │
-│                                                          │
-│  Rate limit check → Cache lookup → Download reel        │
-│  → Transcribe audio → Extract frames → Analyze concept  │
-│  → Hunt promised link → Generate roadmap                │
-└─────────────────────────────────────────────────────────┘
-     │
-     ▼
-┌──────────────────────┐  ┌───────────────────┐
-│  Step-by-step guide  │  │  Promised link     │
-│  (Llama 4 Scout)     │  │  (from 8 layers)  │
-└──────────────────────┘  └───────────────────┘
-```
-
-Progress is streamed to the frontend in real-time via **Server-Sent Events (SSE)**.
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js_15-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![Groq](https://img.shields.io/badge/AI-Groq_LPU-orange?style=flat-square)](https://groq.com)
+[![Supabase](https://img.shields.io/badge/Database-Supabase-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
 ---
 
-## Tech Stack
+## ✨ What It Does
 
-| Layer | Technology |
+Paste any public Instagram Reel URL. The pipeline runs automatically:
+
+```
+URL → Download → Transcribe audio → Extract frames → AI analysis → Generate guide + Find hidden link
+```
+
+1. **Downloads** the reel using yt-dlp with cookie authentication
+2. **Transcribes** the spoken audio using Groq Whisper (`whisper-large-v3`)
+3. **Extracts** 6 key video frames at strategic timestamps
+4. **Analyzes** frames + transcript together using Llama 4 Scout (multimodal)
+5. **Finds** the promised link the creator is gatekeeping — via a 5-layer resolver
+6. **Generates** a complete structured guide using Llama 3.3 70B
+7. **Downloads** the reel as `.mp4` for 15 minutes after decoding
+
+---
+
+## 🖥️ Demo
+
+| Loading Screen | Result Page |
 |---|---|
-| Frontend | Next.js 15 (App Router) + Tailwind CSS v4 → Vercel |
-| Backend | Python FastAPI (async) → Render |
-| Video download | yt-dlp |
-| Audio extraction | ffmpeg |
-| Transcription | Groq Whisper (`whisper-large-v3`) |
-| Frame extraction | ffmpeg-python + Pillow |
-| Concept analysis | Google Gemini 1.5 Pro (vision + JSON) |
-| Roadmap generation | Groq Llama 3.3 70B (`llama-3.3-70b-versatile`) |
-| Link search | Groq LLM + DuckDuckGo / Serper + Instaloader |
-| DM interception | Playwright + Instagrapi (Layer 0) |
-| Cache + Rate limit | Supabase (PostgreSQL) |
+| Real-time pipeline progress via SSE | Sidebar navigation with 6 sections |
+| Stage-by-stage updates from backend | Hero insight card + promised link + download |
 
 ---
 
-## The Link-Finding Engine (8 Layers)
+## 🛠️ Tech Stack
 
-The `link_finder.py` module runs up to 8 signal layers in order, stopping at the first confident result:
-
-| Layer | Signal | Method |
+| Layer | Technology | Purpose |
 |---|---|---|
-| **-1** | Comments | Scans yt-dlp comment data; creator's comments checked first |
-| **0** | yt-dlp metadata | Mines `uploader_url`, `channel_url` from download info dict |
-| **1** | Caption | Regex URL extraction from the reel's description |
-| **2** | Transcript | Groq LLM structured extraction — detects DM gates, comment gates, explicit URLs, domain mentions |
-| **3** | Bio | Instaloader → yt-dlp profile fallback → aggregator resolution (Linktree, Beacons, etc.) |
-| **4** | Targeted search | DuckDuckGo / Serper: `@creator topic site:gumroad.com` |
-| **5** | Generic search | DuckDuckGo / Serper: fallback keyword search |
-| **6** | YouTube crossref | Finds creator's YouTube channel → extracts their bio link |
-
-Layer 2 also detects two special gate types:
-- **DM gate** — creator uses automated DM replies with a keyword
-- **Comment gate** — creator delivers the link via comment keyword automation
+| **Frontend** | Next.js 15 (App Router) + Tailwind CSS | UI, routing, dark-mode styling |
+| **Backend** | Python 3.11 + FastAPI | REST API + SSE streaming |
+| **Downloading** | yt-dlp | Instagram reel download with cookie auth |
+| **Audio/Video** | ffmpeg + ffmpeg-python | Audio extraction, frame capture |
+| **Transcription** | Groq Whisper (`whisper-large-v3`) | Speech-to-text |
+| **Vision AI** | Groq Llama 4 Scout (`llama-4-scout-17b-16e-instruct`) | Multimodal frame + transcript analysis |
+| **Guide Gen** | Groq Llama 3.3 (`llama-3.3-70b-versatile`) | Step-by-step roadmap generation |
+| **Link Finder** | Custom resolver + DuckDuckGo search | 5-layer promised link detection |
+| **Database** | Supabase (PostgreSQL) | Result caching + IP rate limiting |
+| **Frontend Deploy** | Vercel | Static hosting |
+| **Backend Deploy** | Render | FastAPI server |
 
 ---
 
-## Project Structure
+## 🚀 Local Setup
 
-```
-reel-decoder/
-├── backend/
-│   ├── main.py               # FastAPI app — /analyze, /stream-progress, /download, /health
-│   ├── downloader.py         # yt-dlp download + ffmpeg audio extraction
-│   ├── transcriber.py        # Groq Whisper transcription
-│   ├── frame_extractor.py    # Key frame extraction (ffmpeg + base64)
-│   ├── analyzer.py           # Gemini 1.5 Pro concept + withholding analysis
-│   ├── roadmap_generator.py  # Groq Llama 3.3 70B roadmap generation
-│   ├── link_finder.py        # 8-layer promised link resolver
-│   ├── dm_interceptor.py     # Playwright + Instagrapi DM automation
-│   ├── job_store.py          # SSE job queue + single-use download tokens
-│   ├── cache.py              # Supabase result caching
-│   ├── rate_limiter.py       # IP-based rate limiting (5 req/hour via Supabase)
-│   ├── build.sh              # Render build script (installs ffmpeg + dependencies)
-│   ├── requirements.txt
-│   ├── render.yaml
-│   └── .env.example
-└── frontend/
-    ├── app/
-    │   ├── page.tsx          # Main page — idle / loading / result views
-    │   ├── layout.tsx
-    │   └── globals.css       # Design tokens + animations
-    ├── components/
-    │   ├── UrlInput.tsx
-    │   ├── LoadingState.tsx   # Radar animation + SSE-synced progress
-    │   ├── RoadmapDisplay.tsx # Parsed markdown sections with accordion steps
-    │   ├── PromisedLinkCTA.tsx # Link card — handles URLs, DM gates, comment gates
-    │   ├── DownloadButton.tsx  # Single-use .mp4 download with countdown
-    │   ├── Sidebar.tsx        # Section navigation sidebar
-    │   ├── StatCard.tsx       # Metric display card
-    │   ├── ResultLayout.tsx   # Sidebar + main content layout
-    │   └── ui/
-    │       └── Card.tsx       # Reusable card with accent variants
-    ├── lib/
-    │   └── api.ts            # analyzeReel() — POST /analyze + SSE stream
-    └── .env.local.example
+### Prerequisites
+
+Make sure you have these installed before starting:
+
+- **Python 3.11+** — [Download](https://python.org/downloads)
+- **Node.js 18+** — [Download](https://nodejs.org)
+- **ffmpeg** — [Download](https://ffmpeg.org/download.html) and add to PATH
+- **Git** — [Download](https://git-scm.com)
+
+Verify installations:
+```bash
+python --version    # should be 3.11+
+node --version      # should be 18+
+ffmpeg -version     # should show version info
 ```
 
 ---
 
-## Prerequisites
+### Step 1 — Clone the repo
 
-1. **Groq API Key** — [console.groq.com](https://console.groq.com) (free tier available)
-2. **Google Gemini API Key** — [aistudio.google.com](https://aistudio.google.com) (free tier available)
-3. **Supabase project** — [supabase.com](https://supabase.com) (free tier)
-4. **Instagram cookies.txt** — required for yt-dlp authentication (see below)
-5. **ffmpeg** — must be available on `PATH` locally and on Render
-6. **Serper API Key** *(optional)* — [serper.dev](https://serper.dev) — improves search quality; falls back to DuckDuckGo if absent
+```bash
+git clone https://github.com/yashmagar01/reel-decoder.git
+cd reel-decoder
+```
 
 ---
 
-## ⚠️ Instagram Cookies — Critical Setup
+### Step 2 — Backend setup
 
-Instagram requires an authenticated session for yt-dlp to download reels. Without a valid `cookies.txt`, all downloads will fail with a login error.
+```bash
+cd backend
 
-### Export steps (repeat every 2–4 weeks when downloads stop working):
+# Create and activate virtual environment
+python -m venv venv
 
-1. Log into Instagram in **Chrome** or **Firefox**
-2. Install **"Get cookies.txt LOCALLY"** from the Chrome Web Store
-3. Navigate to `https://www.instagram.com`
-4. Click the extension → **Export** → save as `cookies.txt`
+# On Windows:
+venv\Scripts\activate
 
-### Upload to Render:
-1. Go to your Render service → **Environment** tab
-2. Under **Secret Files**, add:
-   - **Filename**: `cookies.txt`
-   - **File path**: `/etc/secrets/cookies.txt`
-   - Paste the exported cookie content
-3. Set env var: `INSTAGRAM_COOKIES_PATH=/etc/secrets/cookies.txt`
+# On Mac/Linux:
+source venv/bin/activate
 
-> ⚠️ Sessions expire every 2–4 weeks. When downloads start failing with a login error, re-export and update the Secret File on Render.
+# Install dependencies
+pip install -r requirements.txt
+```
 
 ---
 
-## Supabase Setup
+### Step 3 — Get your API keys
 
-Run this SQL in your Supabase project's **SQL Editor**:
+You need accounts on two free services:
+
+**Groq** (for all AI — transcription, vision, guide generation)
+1. Go to [console.groq.com](https://console.groq.com)
+2. Sign up for free
+3. Navigate to API Keys → Create API Key
+4. Copy the key — it starts with `gsk_`
+
+**Supabase** (for caching decoded reels + rate limiting)
+1. Go to [supabase.com](https://supabase.com) and create a free project
+2. Go to Project Settings → API
+3. Copy your **Project URL** and **service_role secret key**
+4. Run this SQL in the Supabase SQL Editor to create the tables:
 
 ```sql
-create table if not exists reel_cache (
+-- Cache table: stores decoded reel results
+create table reel_cache (
   id uuid primary key default gen_random_uuid(),
-  instagram_url text not null unique,
-  url_hash text not null unique,
+  instagram_url text unique not null,
+  url_hash text unique not null,
   transcript text,
   concept_summary text,
-  roadmap_markdown text not null,
-  promised_link jsonb,
+  roadmap_markdown text,
+  promised_link text,
   created_at timestamptz default now()
 );
+create index on reel_cache(url_hash);
 
-create index if not exists reel_cache_url_hash_idx on reel_cache (url_hash);
-
-create table if not exists rate_limits (
-  ip_address text not null,
-  request_count integer default 1,
-  window_start timestamptz default now(),
-  primary key (ip_address)
+-- Rate limiting table: 5 requests per IP per hour
+create table rate_limits (
+  ip_address text primary key,
+  request_count integer default 0,
+  window_start timestamptz default now()
 );
 ```
-
-Then go to **Settings → API** and copy:
-- **Project URL** → `SUPABASE_URL`
-- **service_role key** (not the anon key) → `SUPABASE_SERVICE_KEY`
 
 ---
 
-## Environment Variables
+### Step 4 — Export Instagram cookies
 
-### Backend (`.env`)
+The downloader needs your Instagram session to access reels.
 
-```env
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=AIza...
-SUPABASE_URL=https://yourproject.supabase.co
-SUPABASE_SERVICE_KEY=eyJ...
-INSTAGRAM_COOKIES_PATH=/etc/secrets/cookies.txt
-ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+1. Install the **Cookie-Editor** browser extension ([Chrome](https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) / [Firefox](https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/))
+2. Log into [instagram.com](https://instagram.com) in your browser
+3. Click the Cookie-Editor extension icon
+4. Click **Export → Export as Netscape** (this copies to clipboard)
+5. Create a file at `backend/cookies.txt` and paste the contents
 
-# Optional — improves search quality (Layer 4/5)
-SERPER_API_KEY=...
+> ⚠️ **Important:** Use a secondary Instagram account for this, not your main account. Cookies expire every 2–3 weeks — re-export when downloads start failing.
 
-# Optional — for DM interception (Layer 0)
-INSTAGRAM_USERNAME=your_burner_account
-INSTAGRAM_PASSWORD=your_burner_password
+---
+
+### Step 5 — Configure environment variables
+
+Copy the example file and fill in your values:
+
+```bash
+# In the backend/ directory
+cp .env.example .env
 ```
 
-### Frontend (`.env.local`)
+Open `backend/.env` and fill in:
+
+```env
+# Groq — get from console.groq.com (free)
+GROQ_API_KEY=gsk_your_key_here
+
+# Supabase — get from your project settings
+SUPABASE_URL=https://yourproject.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key_here
+
+# Path to your exported Instagram cookies
+INSTAGRAM_COOKIES_PATH=./cookies.txt
+
+# Allowed CORS origins (add your frontend URL here)
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+---
+
+### Step 6 — Frontend setup
+
+```bash
+# From the root of the project
+cd frontend
+
+# Install dependencies
+npm install
+
+# Create environment file
+cp .env.local.example .env.local
+```
+
+Open `frontend/.env.local` and set:
 
 ```env
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
@@ -207,134 +209,181 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 
 ---
 
-## Local Development
+### Step 7 — Run the app
 
-### Backend
+Open two terminals:
 
+**Terminal 1 — Backend:**
 ```bash
 cd backend
+# Activate venv first if not already active
+# Windows: venv\Scripts\activate
+# Mac/Linux: source venv/bin/activate
 
-# 1. Create virtual environment
-python -m venv venv
-venv\Scripts\activate       # Windows
-# source venv/bin/activate  # macOS/Linux
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Install Playwright browsers (for DM interception)
-playwright install chromium
-
-# 4. Copy and fill in env file
-copy .env.example .env
-
-# 5. Start the server
 uvicorn main:app --reload --port 8000
 ```
 
-Verify with:
-```bash
-curl http://localhost:8000/health
-# {"status":"ok"}
+You should see:
+```
+INFO: Application startup complete.
+INFO: Server is warm and ready ✅
 ```
 
-### Frontend
-
+**Terminal 2 — Frontend:**
 ```bash
 cd frontend
-
-npm install
-
-# Set backend URL
-copy .env.local.example .env.local
-# Edit: NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000) and paste an Instagram Reel URL.
 
 ---
 
-## Deployment
+## 📂 Project Structure
 
-### Backend → Render
-
-1. Push the repo to GitHub
-2. Go to [render.com](https://render.com) → **New Web Service**
-3. Connect your repo, set **Root Directory** to `backend`
-4. Set **Build Command**: `./build.sh` *(installs ffmpeg + pip dependencies)*
-5. Set **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-6. Add all environment variables from `.env.example`
-7. Add `cookies.txt` as a **Secret File** at `/etc/secrets/cookies.txt`
-8. Deploy and verify: `https://your-service.onrender.com/health`
-
-> **Note**: `build.sh` handles ffmpeg installation on Render's Linux environment. Do not use `pip install -r requirements.txt` as the build command directly.
-
-### Frontend → Vercel
-
-1. Go to [vercel.com](https://vercel.com) → **New Project**
-2. Import the GitHub repo, set **Root Directory** to `frontend`
-3. Add env var: `NEXT_PUBLIC_BACKEND_URL=https://your-render-service.onrender.com`
-4. Deploy
-
-After deploying to Vercel, update `ALLOWED_ORIGINS` in your Render environment to your Vercel domain to allow cross-origin requests.
-
----
-
-## API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/analyze` | Validates URL, enforces rate limit, starts pipeline, returns `{job_id}` |
-| `GET` | `/stream-progress/{job_id}` | SSE stream — pushes `progress` and `done`/`error` events |
-| `GET` | `/download/{token}` | Single-use video download — token invalidated after first use |
-| `GET` | `/health` | Health check |
-
-### SSE Event Types
-
-```json
-// Progress event
-{"type": "progress", "stage": "transcribe", "message": "Transcribing audio..."}
-
-// Done event
-{
-  "type": "done",
-  "roadmap": "## What This Reel Is Actually Teaching\n...",
-  "concept": {"topic": "...", "target_audience": "...", "tools_mentioned": [...]},
-  "promised_link": {"url": "...", "source": "caption", "confidence": "high"},
-  "download_token": "abc123",
-  "from_cache": false
-}
-
-// Error event
-{"type": "error", "message": "Pipeline error description"}
+```
+reel-decoder/
+├── frontend/                    # Next.js 15 App
+│   ├── app/
+│   │   ├── page.tsx             # Main page — sidebar layout, state management
+│   │   ├── layout.tsx           # Root layout, fonts, metadata
+│   │   └── globals.css          # CSS variables, animations
+│   ├── components/
+│   │   ├── LoadingState.tsx     # Real-time SSE progress display
+│   │   ├── ResultLayout.tsx     # Sidebar + main content wrapper
+│   │   ├── RoadmapDisplay.tsx   # 5-section structured guide renderer
+│   │   ├── PromisedLinkCTA.tsx  # Found link card with source badge
+│   │   └── DownloadButton.tsx   # .mp4 download with countdown timer
+│   └── lib/
+│       └── api.ts               # SSE-based analyzeReel() + getDownloadUrl()
+│
+└── backend/                     # Python FastAPI App
+    ├── main.py                  # App entry, SSE endpoint, download endpoint
+    ├── downloader.py            # yt-dlp + ffmpeg download pipeline
+    ├── transcriber.py           # Groq Whisper transcription
+    ├── frame_extractor.py       # ffmpeg frame extraction + Pillow resize
+    ├── analyzer.py              # Groq Llama 4 Scout multimodal analysis
+    ├── roadmap_generator.py     # Groq Llama 3.3 guide generation
+    ├── link_finder.py           # 5-layer promised link resolver
+    ├── job_store.py             # In-memory SSE job registry + download tokens
+    ├── cache.py                 # Supabase result caching
+    ├── rate_limiter.py          # IP-based rate limiting (5 req/hr)
+    ├── cookies.txt              # Your exported Instagram session (git-ignored)
+    ├── requirements.txt         # Python dependencies
+    └── .env                     # Your secrets (git-ignored)
 ```
 
 ---
 
-## Free Tier Limits
+## 🔗 How the Promised Link Finder Works
 
-| Service | Limit | Notes |
-|---|---|---|
-| Groq (Whisper + Llama) | ~6,000 audio-seconds/day, 100 req/min | ~100 reels/day |
-| Gemini 1.5 Pro | 1,500 req/day | |
-| Render | 750 hours/month, 512MB RAM | Sleeps after 15 min inactivity |
-| Vercel | 100GB bandwidth/month | More than sufficient |
-| Supabase | 500MB database | More than sufficient for caching |
+The app uses a 5-layer resolver to find the URL the creator is hiding:
 
-Supabase caching ensures the same reel is never processed twice, significantly reducing API usage.
+| Layer | Source | Confidence | Method |
+|---|---|---|---|
+| 1 | Reel caption | 🟢 High | Regex URL extraction from description text |
+| 2 | Audio transcript | 🟢 High | Detects verbally mentioned domains/URLs |
+| 3 | Creator bio | 🟡 Medium | Fetches profile, follows Linktree/aggregators |
+| 4 | Targeted search | 🟡 Medium | DuckDuckGo: `"@handle" topic site:gumroad.com` |
+| 5 | Generic search | 🔴 Low | DuckDuckGo broad fallback search |
+
+If a creator uses a keyword-triggered DM bot (ManyChat, Chatrace), the app detects the trigger keyword from comments and displays it so you can get the link directly.
 
 ---
 
-## Common Issues
+## ⚡ Caching & Rate Limiting
 
-| Problem | Fix |
-|---|---|
-| Download fails with login error | Re-export `cookies.txt` — Instagram session expired |
-| `ffmpeg: command not found` | Install ffmpeg and ensure it is in `PATH`; on Render, use `build.sh` |
-| Gemini returns non-JSON | Occasional — the app automatically retries after stripping markdown fences |
-| Render cold start (30–60s) | Expected on free tier — the loading screen handles wait time gracefully |
-| Rate limited (429) | 5 decodes per hour per IP — wait and try again |
-| DuckDuckGo rate limit | Searches retry up to 3 times with random delays; set `SERPER_API_KEY` for reliability |
-| `playwright install` required | First run needs `playwright install chromium` for DM interception |
+- **Result caching** — each decoded reel is cached by SHA-256 URL hash. The same reel URL returns instantly on subsequent requests.
+- **Rate limiting** — 5 requests per IP per hour. Prevents abuse on the free tier.
+- **Download tokens** — `.mp4` downloads are single-use, expire after 15 minutes, then the file is deleted.
+
+---
+
+## ⚠️ Known Limitations
+
+| Limitation | Cause | Workaround |
+|---|---|---|
+| Cookies expire every 2–3 weeks | Instagram session timeout | Re-export cookies.txt from browser |
+| First request is slow (30–60s) | Render free tier cold start | Frontend pings `/health` during warmup |
+| Reels over 5 minutes are rejected | Free tier API + storage limits | Use shorter reels |
+| Music-only reels can't be decoded | Nothing to transcribe | Works best on talking-head tutorials |
+| Private/deleted reels fail | yt-dlp can't access them | Only public reels are supported |
+
+---
+
+## 🌐 Deploying to Production
+
+### Backend → Render
+
+1. Push your code to GitHub
+2. Go to [render.com](https://render.com) → New Web Service → Connect your repo
+3. Set **Root Directory** to `backend`
+4. Set **Build Command** to `./build.sh`
+5. Set **Start Command** to `uvicorn main:app --host 0.0.0.0 --port $PORT`
+6. Add all environment variables from `backend/.env` in Render's Environment tab
+7. Upload your `cookies.txt` contents as an environment variable or use Render's persistent disk
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) → New Project → Import your GitHub repo
+2. Set **Root Directory** to `frontend`
+3. Add environment variable: `NEXT_PUBLIC_BACKEND_URL` = your Render service URL
+4. Deploy
+
+### After deploying
+
+Update `ALLOWED_ORIGINS` in your Render environment to include your Vercel URL:
+```
+ALLOWED_ORIGINS=https://your-app.vercel.app
+```
+
+> **Tip:** Set up a free cron job at [cron-job.org](https://cron-job.org) to ping your Render `/health` endpoint every 14 minutes — this prevents cold starts entirely.
+
+---
+
+## 📊 Free Tier Limits At a Glance
+
+| Service | Key Limit | Our Usage |
+|---|---|---|
+| Groq Whisper | ~100 reels/day | Audio transcription |
+| Groq Llama 4 Scout | 30 req/min, 14,400/day | Vision + text analysis |
+| Groq Llama 3.3 70B | 30 req/min, 14,400/day | Guide generation |
+| Supabase | 500MB DB, 500K API calls/month | Cache + rate limits |
+| Render | 750 hours/month | Backend hosting |
+| Vercel | 100GB bandwidth/month | Frontend hosting |
+
+Everything used here is **100% free tier**. No credit card required for any service.
+
+---
+
+## 🔮 Roadmap
+
+- [ ] Chrome extension — decode directly from Instagram without leaving the page
+- [ ] TikTok + YouTube Shorts support
+- [ ] User accounts with saved decoded reels history
+- [ ] Share decoded guide via link
+- [ ] Analytics dashboard (decode count, cache hit rate, top creators)
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome. For major changes, open an issue first to discuss what you'd like to change.
+
+1. Fork the repo
+2. Create your branch: `git checkout -b feature/your-feature`
+3. Commit: `git commit -m 'Add your feature'`
+4. Push: `git push origin feature/your-feature`
+5. Open a pull request
+
+---
+
+## 📄 License
+
+MIT — do whatever you want with it.
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/yashmagar01">Yash Magar</a> · No follows. No comments. No waiting.
+</p>
