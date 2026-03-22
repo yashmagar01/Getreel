@@ -30,6 +30,11 @@ def check_rate_limit(ip_address: str) -> bool:
     - If IP seen within window and count < MAX: increment count, allow.
     - If IP seen within window and count >= MAX: block.
     """
+    # Bypass rate limit for local development (testers)
+    if ip_address in ("127.0.0.1", "localhost", "::1"):
+        logger.info(f"Rate limit bypass allowed for local IP: {ip_address}")
+        return True
+
     try:
         client = _get_client()
         now = datetime.now(timezone.utc)

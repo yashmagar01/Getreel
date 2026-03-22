@@ -5,6 +5,7 @@ import { useState } from "react";
 interface RoadmapDisplayProps {
   roadmap: string;
   fromCache?: boolean;
+  skipFirst?: boolean;
 }
 
 interface ParsedSection {
@@ -56,10 +57,8 @@ function parseBullets(text: string): string[] {
     .filter(Boolean);
 }
 
-// Parse numbered steps — handles "1. **Title**: description" and "1. description" formats
-function parseSteps(
-  text: string
-): { title: string; description: string }[] {
+// Parse numbered steps
+function parseSteps(text: string): { title: string; description: string }[] {
   const lines = text.split("\n");
   const steps: { title: string; description: string }[] = [];
   let current: { title: string; description: string } | null = null;
@@ -82,7 +81,6 @@ function parseSteps(
   return steps;
 }
 
-// Parse resource links or plain text resources
 function parseResources(text: string): { label: string; url?: string }[] {
   return text
     .split("\n")
@@ -91,11 +89,6 @@ function parseResources(text: string): { label: string; url?: string }[] {
       const clean = line.replace(/^[\s*\-]+/, "").trim();
       const linkMatch = clean.match(/\[(.+?)\]\((https?:\/\/.+?)\)/);
       if (linkMatch) return { label: linkMatch[1], url: linkMatch[2] };
-      const urlInline = clean.match(/(https?:\/\/[^\s)]+)/);
-      if (urlInline) {
-        const label = clean.replace(urlInline[1], "").replace(/[:\-<>]/g, "").trim();
-        return { label: label || urlInline[1], url: urlInline[1] };
-      }
       return { label: clean };
     })
     .filter((r) => r.label);
@@ -103,399 +96,179 @@ function parseResources(text: string): { label: string; url?: string }[] {
 
 // ── Section renderers ──────────────────────────────────────────────────────
 
-function TeachingSection({ content }: { content: string }) {
+function SectionWrapper({ 
+  title, 
+  emoji, 
+  children, 
+  borderColor, 
+  bgColor,
+  delay
+}: { 
+  title: string; 
+  emoji: string; 
+  children: React.ReactNode; 
+  borderColor: string;
+  bgColor: string;
+  delay: string;
+}) {
   return (
-    <div className="section-card teaching-card">
-      <div className="section-header">
-        <span className="section-icon">🎯</span>
-        <h2 className="section-title">What This Reel Is Actually Teaching</h2>
+    <div 
+      className={`fade-up w-full p-6 mb-6 rounded-2xl border border-white/5 border-l-4 ${borderColor} ${bgColor} backdrop-blur-sm`}
+      style={{ animationDelay: delay }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-xl shrink-0">{emoji}</span>
+        <h2 className="text-lg font-semibold text-white tracking-tight">{title}</h2>
       </div>
-      <p className="teaching-text">{content}</p>
+      {children}
     </div>
   );
 }
 
-function NeedsSection({ content }: { content: string }) {
+function TeachingSection({ content, delay }: { content: string; delay: string }) {
+  return (
+    <SectionWrapper title="What This Reel Is Actually Teaching" emoji="🎯" borderColor="border-l-purple-500" bgColor="bg-purple-500/5" delay={delay}>
+      <p className="text-gray-300 leading-relaxed text-sm md:text-base">{content}</p>
+    </SectionWrapper>
+  );
+}
+
+function NeedsSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
   return (
-    <div className="section-card needs-card">
-      <div className="section-header">
-        <span className="section-icon">🛠️</span>
-        <h2 className="section-title">What You'll Need</h2>
-      </div>
-      <div className="needs-grid">
+    <SectionWrapper title="What You'll Need" emoji="🛠️" borderColor="border-l-emerald-500" bgColor="bg-emerald-500/5" delay={delay}>
+      <div className="flex flex-wrap gap-2">
         {items.map((item, i) => (
-          <div key={i} className="need-pill">
-            <span className="need-dot" />
+          <div key={i} className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium">
             {item}
           </div>
         ))}
       </div>
-    </div>
+    </SectionWrapper>
   );
 }
 
-function StepsSection({ content }: { content: string }) {
+function StepsSection({ content, delay }: { content: string; delay: string }) {
   const steps = parseSteps(content);
   const [activeStep, setActiveStep] = useState<number | null>(null);
 
   return (
-    <div className="section-card steps-card">
-      <div className="section-header">
-        <span className="section-icon">📋</span>
-        <h2 className="section-title">Step-by-Step Guide</h2>
-      </div>
-      <div className="steps-list">
+    <SectionWrapper title="Step-by-Step Guide" emoji="📋" borderColor="border-l-blue-500" bgColor="bg-blue-500/5" delay={delay}>
+      <div className="space-y-2">
         {steps.map((step, i) => (
           <div
             key={i}
-            className={`step-item ${activeStep === i ? "step-active" : ""}`}
+            className={`group rounded-xl border border-white/5 transition-all duration-200 cursor-pointer ${
+              activeStep === i ? "bg-blue-950/30 border-blue-500/30" : "bg-white/5 hover:bg-white/10"
+            }`}
             onClick={() => setActiveStep(activeStep === i ? null : i)}
           >
-            <div className="step-number">{i + 1}</div>
-            <div className="step-body">
-              <div className="step-title-row">
-                <span className="step-title">{step.title}</span>
-                <span className="step-chevron">
-                  {activeStep === i ? "▲" : "▼"}
-                </span>
+            <div className="flex items-center gap-4 p-4">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border transition-colors ${
+                activeStep === i ? "bg-blue-500 text-white border-blue-400" : "bg-gray-800 text-gray-400 border-white/5"
+              }`}>
+                {i + 1}
               </div>
-              {activeStep === i && step.description && (
-                <p className="step-description">{step.description}</p>
-              )}
+              <div className="flex-1 font-medium text-gray-200 text-sm">{step.title}</div>
+              <svg className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${activeStep === i ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
+            {activeStep === i && (
+              <div className="px-16 pb-4 text-sm text-gray-400 leading-relaxed animate-in fade-in slide-in-from-top-1">
+                {step.description}
+              </div>
+            )}
           </div>
         ))}
       </div>
-    </div>
+    </SectionWrapper>
   );
 }
 
-function MistakesSection({ content }: { content: string }) {
+function MistakesSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
-  const fallback = !items.length ? [content] : items;
-
   return (
-    <div className="section-card mistakes-card">
-      <div className="section-header">
-        <span className="section-icon">⚠️</span>
-        <h2 className="section-title">Common Mistakes to Avoid</h2>
-      </div>
-      <div className="mistakes-list">
-        {fallback.map((item, i) => (
-          <div key={i} className="mistake-item">
-            <span className="mistake-x">✕</span>
-            <span>{item}</span>
+    <SectionWrapper title="Common Mistakes to Avoid" emoji="⚠️" borderColor="border-l-red-500" bgColor="bg-red-500/5" delay={delay}>
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className="flex gap-3 p-3 rounded-lg bg-red-500/5 text-red-200 text-sm leading-relaxed">
+            <span className="text-red-500 font-bold shrink-0">✕</span>
+            {item}
           </div>
         ))}
       </div>
-    </div>
+    </SectionWrapper>
   );
 }
 
-function ResourcesSection({ content }: { content: string }) {
+function ResourcesSection({ content, delay }: { content: string; delay: string }) {
   const resources = parseResources(content);
-  const fallback = !resources.length
-    ? [{ label: content }]
-    : resources;
-
   return (
-    <div className="section-card resources-card">
-      <div className="section-header">
-        <span className="section-icon">📚</span>
-        <h2 className="section-title">Free Resources to Learn More</h2>
-      </div>
-      <div className="resources-list">
-        {fallback.map((r, i) =>
+    <SectionWrapper title="Free Resources to Learn More" emoji="📚" borderColor="border-l-amber-500" bgColor="bg-amber-500/5" delay={delay}>
+      <div className="grid gap-2">
+        {resources.map((r, i) => (
           r.url ? (
             <a
               key={i}
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="resource-link"
+              className="flex items-center justify-between p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/15 text-amber-200 text-sm transition-all group"
             >
-              <span className="resource-arrow">↗</span>
-              {r.label}
+              <span>{r.label}</span>
+              <svg className="w-4 h-4 opacity-50 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
             </a>
           ) : (
-            <div key={i} className="resource-plain">
-              <span className="resource-dot">•</span>
+            <div key={i} className="p-3 rounded-lg bg-gray-800/40 text-gray-400 text-sm">
               {r.label}
             </div>
           )
-        )}
+        ))}
       </div>
-    </div>
+    </SectionWrapper>
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
-
-export default function RoadmapDisplay({ roadmap, fromCache }: RoadmapDisplayProps) {
-  const [copied, setCopied] = useState(false);
+export default function RoadmapDisplay({ roadmap, fromCache, skipFirst }: RoadmapDisplayProps) {
   const sections = parseSections(roadmap);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(roadmap);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const renderSection = (section: ParsedSection, index: number) => {
+    // Determine delay for fade-up (index * 80ms)
+    const delay = `${index * 80}ms`;
 
-  const renderSection = (section: ParsedSection) => {
+    if (skipFirst && section.title === "What This Reel Is Actually Teaching") return null;
+
     switch (section.title) {
       case "What This Reel Is Actually Teaching":
-        return <TeachingSection key={section.title} content={section.content} />;
+        return <TeachingSection key={section.title} content={section.content} delay={delay} />;
       case "What You'll Need":
-        return <NeedsSection key={section.title} content={section.content} />;
+        return <NeedsSection key={section.title} content={section.content} delay={delay} />;
       case "Step-by-Step Guide":
-        return <StepsSection key={section.title} content={section.content} />;
+        return <StepsSection key={section.title} content={section.content} delay={delay} />;
       case "Common Mistakes to Avoid":
-        return <MistakesSection key={section.title} content={section.content} />;
+        return <MistakesSection key={section.title} content={section.content} delay={delay} />;
       case "Free Resources to Learn More":
-        return <ResourcesSection key={section.title} content={section.content} />;
+        return <ResourcesSection key={section.title} content={section.content} delay={delay} />;
       default:
         return null;
     }
   };
 
   return (
-    <>
-      <style>{`
-        .roadmap-wrapper {
-          width: 100%;
-          max-width: 760px;
-          margin: 0 auto;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-
-        /* ── Top bar ── */
-        .roadmap-topbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 20px;
-        }
-        .roadmap-label {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 13px;
-          font-weight: 500;
-          color: #a78bfa;
-        }
-        .roadmap-dot {
-          width: 8px; height: 8px;
-          border-radius: 50%;
-          background: #7c3aed;
-          box-shadow: 0 0 6px #7c3aed;
-        }
-        .cache-badge {
-          font-size: 11px;
-          padding: 3px 10px;
-          border-radius: 20px;
-          background: rgba(250, 204, 21, 0.1);
-          border: 1px solid rgba(250, 204, 21, 0.3);
-          color: #fbbf24;
-        }
-        .copy-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 14px;
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: rgba(255,255,255,0.05);
-          color: #d1d5db;
-          font-size: 12px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .copy-btn:hover { background: rgba(255,255,255,0.1); }
-
-        /* ── Section cards ── */
-        .section-card {
-          border-radius: 16px;
-          padding: 24px 28px;
-          margin-bottom: 16px;
-          border: 1px solid rgba(255,255,255,0.06);
-          transition: border-color 0.2s;
-        }
-        .section-card:hover { border-color: rgba(255,255,255,0.12); }
-
-        .section-header {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 16px;
-        }
-        .section-icon { font-size: 20px; }
-        .section-title {
-          font-size: 15px;
-          font-weight: 600;
-          margin: 0;
-          letter-spacing: -0.01em;
-        }
-
-        /* Teaching */
-        .teaching-card { background: rgba(124, 58, 237, 0.08); }
-        .teaching-card .section-title { color: #c4b5fd; }
-        .teaching-text {
-          font-size: 14px;
-          line-height: 1.75;
-          color: #d1d5db;
-          margin: 0;
-        }
-
-        /* Needs */
-        .needs-card { background: rgba(16, 185, 129, 0.07); }
-        .needs-card .section-title { color: #6ee7b7; }
-        .needs-grid {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-        .need-pill {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 14px;
-          border-radius: 20px;
-          background: rgba(16, 185, 129, 0.12);
-          border: 1px solid rgba(16, 185, 129, 0.2);
-          color: #a7f3d0;
-          font-size: 13px;
-        }
-        .need-dot {
-          width: 5px; height: 5px;
-          border-radius: 50%;
-          background: #10b981;
-          flex-shrink: 0;
-        }
-
-        /* Steps */
-        .steps-card { background: rgba(59, 130, 246, 0.07); }
-        .steps-card .section-title { color: #93c5fd; }
-        .steps-list { display: flex; flex-direction: column; gap: 8px; }
-        .step-item {
-          display: flex;
-          gap: 14px;
-          align-items: flex-start;
-          padding: 14px 16px;
-          border-radius: 10px;
-          background: rgba(59, 130, 246, 0.08);
-          border: 1px solid rgba(59, 130, 246, 0.12);
-          cursor: pointer;
-          transition: background 0.2s, border-color 0.2s;
-        }
-        .step-item:hover, .step-active {
-          background: rgba(59, 130, 246, 0.15) !important;
-          border-color: rgba(59, 130, 246, 0.3) !important;
-        }
-        .step-number {
-          width: 26px; height: 26px;
-          border-radius: 50%;
-          background: rgba(59, 130, 246, 0.3);
-          border: 1px solid rgba(59, 130, 246, 0.5);
-          color: #93c5fd;
-          font-size: 12px;
-          font-weight: 700;
-          display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0;
-        }
-        .step-body { flex: 1; min-width: 0; }
-        .step-title-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 8px;
-        }
-        .step-title {
-          font-size: 14px;
-          font-weight: 500;
-          color: #e2e8f0;
-        }
-        .step-chevron { font-size: 9px; color: #64748b; flex-shrink: 0; }
-        .step-description {
-          margin: 8px 0 0;
-          font-size: 13px;
-          line-height: 1.65;
-          color: #94a3b8;
-        }
-
-        /* Mistakes */
-        .mistakes-card { background: rgba(239, 68, 68, 0.06); }
-        .mistakes-card .section-title { color: #fca5a5; }
-        .mistakes-list { display: flex; flex-direction: column; gap: 8px; }
-        .mistake-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          font-size: 13px;
-          color: #fecaca;
-          line-height: 1.6;
-          padding: 10px 14px;
-          border-radius: 8px;
-          background: rgba(239, 68, 68, 0.08);
-        }
-        .mistake-x {
-          color: #f87171;
-          font-weight: 700;
-          font-size: 12px;
-          flex-shrink: 0;
-          margin-top: 2px;
-        }
-
-        /* Resources */
-        .resources-card { background: rgba(245, 158, 11, 0.06); }
-        .resources-card .section-title { color: #fcd34d; }
-        .resources-list { display: flex; flex-direction: column; gap: 6px; }
-        .resource-link {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          border-radius: 8px;
-          background: rgba(245, 158, 11, 0.08);
-          border: 1px solid rgba(245, 158, 11, 0.15);
-          color: #fde68a;
-          font-size: 13px;
-          text-decoration: none;
-          transition: background 0.2s;
-        }
-        .resource-link:hover { background: rgba(245, 158, 11, 0.15); }
-        .resource-arrow { font-size: 12px; opacity: 0.7; }
-        .resource-plain {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          font-size: 13px;
-          color: #fde68a;
-          line-height: 1.6;
-          padding: 8px 14px;
-        }
-        .resource-dot { flex-shrink: 0; }
-      `}</style>
-
-      <div className="roadmap-wrapper">
-        <div className="roadmap-topbar">
-          <div className="roadmap-label">
-            <span className="roadmap-dot" />
-            Your Roadmap
-            {fromCache && (
-              <span className="cache-badge">⚡ Instant — decoded before</span>
-            )}
-          </div>
-          <button className="copy-btn" onClick={handleCopy}>
-            {copied ? "✓ Copied!" : "⧉ Copy Markdown"}
-          </button>
+    <div className="w-full max-w-4xl mx-auto">
+      {sections.length > 0 ? (
+        sections.map((section, idx) => renderSection(section, idx))
+      ) : (
+        <div className="p-6 rounded-2xl bg-gray-900 border border-white/10 text-gray-500 text-sm">
+          Could not parse roadmap sections. Raw output below:
+          <pre className="mt-4 p-4 rounded bg-black/40 overflow-x-auto text-[10px] sm:text-xs text-gray-500 whitespace-pre-wrap">
+            {roadmap}
+          </pre>
         </div>
-
-        {sections.length > 0
-          ? sections.map(renderSection)
-          : <p style={{ color: "#94a3b8", fontSize: 14 }}>Could not parse roadmap sections. Raw output below.<br /><pre style={{ marginTop: 8, whiteSpace: "pre-wrap", fontSize: 12 }}>{roadmap}</pre></p>
-        }
-      </div>
-    </>
+      )}
+    </div>
   );
 }

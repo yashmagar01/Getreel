@@ -5,13 +5,19 @@ export interface PromisedLink {
   confidence: "high" | "medium" | "low";
 }
 
+export interface Concept {
+  topic: string;
+  target_audience: string;
+  tools_mentioned: string[];
+}
+
 export interface ProgressEvent {
   type: "progress" | "done" | "error";
   stage?: string;
   message?: string;
   // present only when type === "done"
   roadmap?: string;
-  concept?: Record<string, unknown>;
+  concept?: Concept;
   promised_link?: PromisedLink | null;
   download_token?: string;
   from_cache?: boolean;

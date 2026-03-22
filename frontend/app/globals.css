@@ -72,4 +72,29 @@
       transform: translate(0, 0);
     }
   }
+
+  /* Stage card transition in LoadingState */
+  .stage-card {
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Result sections fade up on mount */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up {
+    animation: fadeUp 0.4s ease forwards;
+  }
+
+  /* Shimmer for current loading stage */
+  @keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+  }
+  .shimmer {
+    background: linear-gradient(90deg, transparent 25%, rgba(139,92,246,0.15) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite;
+  }
 }
