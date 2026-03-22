@@ -91,5 +91,6 @@ def download_reel(url: str, temp_dir: str) -> dict:
     return {
         "video_path": video_path,
         "audio_path": audio_path,
+        "temp_dir": temp_dir,
         "info": info,          # full yt-dlp dict — link_finder uses this directly
     }

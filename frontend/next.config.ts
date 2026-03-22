@@ -7,6 +7,16 @@ const nextConfig: NextConfig = {
     remotePatterns: [],
   },
   allowedDevOrigins: ['localhost', '[IP_ADDRESS]'],
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -5,20 +5,46 @@ import UrlInput from "@/components/UrlInput";
 import LoadingState from "@/components/LoadingState";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
 import PromisedLinkCTA from "@/components/PromisedLinkCTA";
-import type { PromisedLink, AnalyzeResult } from "@/lib/api";
+import { DownloadButton } from "@/components/DownloadButton";
+import { analyzeReel, type ProgressEvent } from "@/lib/api";
 
-type Result = AnalyzeResult;
+type Result = ProgressEvent;
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
+  const [currentStage, setCurrentStage] = useState<string>("");
   const [result, setResult] = useState<Result | null>(null);
+  const [downloadToken, setDownloadToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleResult = (data: Result) => {
-    setResult(data);
+  const handleAnalyze = async (url: string) => {
+    setIsLoading(true);
+    setResult(null);
+    setDownloadToken(null);
+    setError(null);
+    setCurrentStage("rate_limit");
+
+    try {
+      const result = await analyzeReel(url, (event) => {
+        if (event.type === "progress" && event.stage) {
+          setCurrentStage(event.stage);
+        }
+      });
+
+      setResult(result);
+      setDownloadToken(result.download_token ?? null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleReset = () => {
     setResult(null);
+    setDownloadToken(null);
+    setError(null);
+    setCurrentStage("");
   };
 
   return (
@@ -60,9 +86,9 @@ export default function Home() {
         {/* Input */}
         {!result && (
           <UrlInput
-            onResult={handleResult}
-            onLoadingChange={setIsLoading}
+            onSubmit={handleAnalyze}
             isLoading={isLoading}
+            error={error || ""}
           />
         )}
 
@@ -87,7 +113,7 @@ export default function Home() {
         )}
 
         {/* Loading state */}
-        {isLoading && <LoadingState />}
+        {isLoading && <LoadingState currentStage={currentStage} />}
 
         {/* Result */}
         {result && !isLoading && (
@@ -107,7 +133,10 @@ export default function Home() {
             {result.promised_link && (
               <PromisedLinkCTA link={result.promised_link} />
             )}
-            <RoadmapDisplay roadmap={result.roadmap} fromCache={result.from_cache} />
+
+            {downloadToken && <DownloadButton token={downloadToken} />}
+
+            <RoadmapDisplay roadmap={result.roadmap || ""} fromCache={result.from_cache || false} />
           </>
         )}
 

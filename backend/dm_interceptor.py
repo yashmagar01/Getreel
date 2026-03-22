@@ -58,6 +58,14 @@ async def intercept_via_dm(
     """
     Layer 0: Intercept creator bot links via Playwright.
     """
+    import sys
+    # Win32 SelectorEventLoop doesn't support subprocesses needed by Playwright
+    if sys.platform == 'win32':
+        loop = asyncio.get_event_loop()
+        if type(loop).__name__ == '_WindowsSelectorEventLoop':
+            logger.info("Layer 0: Playwright skipped on Windows SelectorEventLoop — falling through to Layer 1")
+            return None
+
     cookies_file = os.getenv("INSTAGRAM_COOKIES_PATH", "cookies.txt")
     if not os.path.isabs(cookies_file):
         cookies_file = os.path.join(os.path.dirname(__file__), cookies_file)
@@ -149,9 +157,12 @@ async def intercept_via_dm(
                     "label": "🤖 Auto-DM (Verified via Browser)"
                 }
 
-        except Exception as e:
+        except (NotImplementedError, Exception) as e:
             logger.error(f"Layer 0 (Playwright) Error: {e}")
         finally:
-            await browser.close()
+            try:
+                await browser.close()
+            except:
+                pass
             
     return None

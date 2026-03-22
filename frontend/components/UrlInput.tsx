@@ -2,45 +2,38 @@
 
 import { useState, useRef } from "react";
 
-import type { AnalyzeResult } from "@/lib/api";
+// Remove unused AnalyzeResult import
 
 interface UrlInputProps {
-  onResult: (data: AnalyzeResult) => void;
-  onLoadingChange: (loading: boolean) => void;
+  onSubmit: (url: string) => void;
   isLoading: boolean;
+  error: string;
 }
 
 const INSTAGRAM_REEL_REGEX = /instagram\.com\/reel\/([A-Za-z0-9_-]+)/;
 
-export default function UrlInput({ onResult, onLoadingChange, isLoading }: UrlInputProps) {
+export default function UrlInput({ onSubmit, isLoading, error: externalError }: UrlInputProps) {
   const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const error = localError || externalError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setLocalError("");
 
     const trimmed = url.trim();
     if (!trimmed) return;
 
     // Robust check: does it contain 'instagram.com/reel/'?
     if (!INSTAGRAM_REEL_REGEX.test(trimmed)) {
-      setError("Please enter a valid Instagram Reel URL.");
+      setLocalError("Please enter a valid Instagram Reel URL.");
       inputRef.current?.focus();
       return;
     }
 
-    onLoadingChange(true);
-    try {
-      const { analyzeReel } = await import("@/lib/api");
-      const data = await analyzeReel(trimmed);
-      onResult(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-    } finally {
-      onLoadingChange(false);
-    }
+    onSubmit(trimmed);
   };
 
   const isButtonEnabled = !isLoading && url.trim().length > 0;
@@ -66,7 +59,7 @@ export default function UrlInput({ onResult, onLoadingChange, isLoading }: UrlIn
             value={url}
             onChange={(e) => {
               setUrl(e.target.value);
-              if (error) setError("");
+              if (localError) setLocalError("");
             }}
             onPaste={(e) => {
               const pastedText = e.clipboardData.getData("text");
