@@ -9,15 +9,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Reel Decoder — Get the actual guide, not the teaser",
+  title: "Reel Decoder — Decode Instagram Reels Instantly",
   description:
-    "Paste any Instagram Reel URL and get the complete step-by-step guide the creator was hiding. No follows, no comments, no waiting. Powered by Groq, Gemini, and Llama AI.",
-  keywords: ["instagram reel", "ai decoder", "tutorial generator", "content analysis"],
-  openGraph: {
-    title: "Reel Decoder",
-    description: "Reverse-engineer Instagram teaser reels into complete how-to guides.",
-    type: "website",
-  },
+    "Paste any Instagram Reel URL. AI extracts the hidden roadmap, promised links, and resources — no follows, no comments, no waiting.",
 };
 
 export default function RootLayout({
@@ -27,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} dark`}>
-      <body className="font-sans antialiased bg-gray-950 text-white">
+      <body className="font-sans antialiased bg-[#111213] text-[#f4f4f5]">
         {children}
       </body>
     </html>
