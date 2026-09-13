@@ -73,8 +73,21 @@ export default function LinkInputCard({
         body:    JSON.stringify({ url: url.trim(), quality }),
       });
       if (!resp.ok) {
+        let msg = "Download failed";
         const txt = await resp.text();
-        throw new Error(txt || "Download failed");
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed.detail && Array.isArray(parsed.detail)) {
+            msg = parsed.detail[0].msg;
+          } else if (parsed.detail) {
+             msg = typeof parsed.detail === 'string' ? parsed.detail : JSON.stringify(parsed.detail);
+          } else {
+             msg = txt;
+          }
+        } catch {
+          msg = txt || msg;
+        }
+        throw new Error(msg);
       }
       const blob = await resp.blob();
       const disposition = resp.headers.get("Content-Disposition");

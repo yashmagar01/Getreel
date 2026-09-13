@@ -67,6 +67,24 @@ function getSourceUrl(meta: ReelMeta | null, result: Result): string | null {
   return null;
 }
 
+// ── Content-type display labels (Phase D/E: section title + sidebar) ─────────
+function sectionTitleFor(contentType?: string): string {
+  switch (contentType) {
+    case "entertainment_commentary": return "Breakdown";
+    case "pure_entertainment":       return "Quick Recap";
+    default:                        return "Roadmap";
+  }
+}
+
+function contentTypeLabel(contentType?: string): string {
+  switch (contentType) {
+    case "teaser_tutorial":          return "Tutorial breakdown";
+    case "entertainment_commentary": return "Entertainment breakdown";
+    case "pure_entertainment":       return "Quick recap";
+    default:                         return "Tutorial breakdown";
+  }
+}
+
 export default function Home() {
   const [isLoading, setIsLoading]       = useState(false);
   const [currentStage, setCurrentStage] = useState<string>("");
@@ -296,15 +314,16 @@ export default function Home() {
                     )}
                   </section>
 
-                  {/* Roadmap */}
-                  {result.roadmap && (
+                  {/* Roadmap / Breakdown / Quick Recap (content-type aware) */}
+                  {(result.roadmap || (result.blocks?.length ?? 0) > 0) && (
                     <section className="space-y-6 pt-8 border-t border-[var(--border-default)]">
                       <div className="flex items-center gap-4">
-                        <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Roadmap</h3>
+                        <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">{sectionTitleFor(result.content_type)}</h3>
                         <div className="h-px flex-1 bg-[var(--border-default)]" />
                       </div>
                       <RoadmapDisplay
-                        roadmap={result.roadmap}
+                        roadmap={result.roadmap || ""}
+                        blocks={result.blocks}
                         fromCache={result.from_cache || false}
                         skipFirst={true}
                       />
@@ -357,7 +376,7 @@ export default function Home() {
                     <div className="bg-white rounded-[18px] px-5 py-2 border border-[var(--border-default)] shadow-[0_8px_24px_rgba(15,23,42,.05)]">
                       {[
                         { label: "Target Audience", value: result.concept?.target_audience || "General learners" },
-                        { label: "Content Type", value: "Tutorial breakdown" },
+                        { label: "Content Type", value: contentTypeLabel(result.content_type) },
                         { label: "Read Time", value: estimateReadTime(result.roadmap) },
                         { label: "Difficulty", value: "Easy" },
                       ].map((row, i, arr) => (
@@ -382,7 +401,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  {result.roadmap && (
+                  {(result.roadmap || (result.blocks?.length ?? 0) > 0) && (
                     <div className="fade-up" style={{ animationDelay: "200ms" }}>
                       <div className="flex items-center gap-2 mb-3">
                         <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />

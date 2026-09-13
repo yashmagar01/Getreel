@@ -24,6 +24,9 @@ def get_cached_result(url: str) -> dict | None:
     """
     Look up a previously decoded reel by URL.
     Returns the full row dict if found, None if not cached.
+    Normalises the additive `content_type` / `blocks` fields (Phase D):
+    `blocks` may be stored as a JSON string — deserialised if present.
+    Legacy rows without these keys keep working unchanged.
     """
     try:
         client = _get_client()
@@ -43,6 +46,11 @@ def get_cached_result(url: str) -> dict | None:
                     row["promised_link"] = json.loads(row["promised_link"])
                 except Exception:
                     pass
+            if row.get("blocks") and isinstance(row["blocks"], str):
+                try:
+                    row["blocks"] = json.loads(row["blocks"])
+                except Exception:
+                    pass
             return row
         return None
     except Exception as e:
@@ -56,10 +64,14 @@ def save_result(
     concept: dict,
     roadmap: str,
     promised_link: dict | None = None,
+    content_type: str | None = None,
+    blocks: list | None = None,
 ) -> None:
     """
     Save a decoded reel result to Supabase.
     Uses upsert (on conflict update) so duplicate processing never crashes.
+    `content_type` / `blocks` are additive (Phase D): old rows keep working,
+    and if the table lacks the new columns the save retries legacy-only.
     """
     try:
         client = _get_client()
@@ -72,7 +84,21 @@ def save_result(
             "roadmap_markdown": roadmap,
             "promised_link": json.dumps(promised_link) if promised_link else None,
         }
-        client.table("reel_cache").upsert(row, on_conflict="url_hash").execute()
+        if content_type is not None:
+            row["content_type"] = content_type
+        if blocks is not None:
+            row["blocks"] = json.dumps(blocks)
+        try:
+            client.table("reel_cache").upsert(row, on_conflict="url_hash").execute()
+        except Exception as e:
+            # Table may predate the content_type/blocks columns — retry legacy-only.
+            if content_type is not None or blocks is not None:
+                logger.warning(f"Cache save with new fields failed, retrying legacy: {e}")
+                row.pop("content_type", None)
+                row.pop("blocks", None)
+                client.table("reel_cache").upsert(row, on_conflict="url_hash").execute()
+            else:
+                raise
         logger.info("Saved to cache.")
     except Exception as e:
         logger.warning(f"Cache save failed (non-fatal): {str(e)}")
