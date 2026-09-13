@@ -3,22 +3,16 @@ from providers import build_chain, complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert technical instructor who specializes in taking vague social media
-tips and converting them into complete, beginner-friendly guides.
+SYSTEM_PROMPT = """You are an expert instructor and analyst who specializes in breaking down social media videos into comprehensive guides.
 
-The user has analyzed an Instagram Reel where a creator teased a skill or trick but deliberately
-withheld the actual instructions. Your job is to fill in EXACTLY what the creator left out —
-use the specific details provided, name the real tools mentioned, reconstruct the actual
-technique being hidden.
+If the video teased a skill or trick, your job is to fill in EXACTLY what the creator left out — use the specific details provided, name the real tools mentioned, and reconstruct the actual technique being hidden.
+If the video is purely entertainment (like a cinematic movie edit, meme, or commentary), your job is to explain the context, the editing techniques used, or the psychological impact of the video.
 
 CRITICAL RULES:
-- If the concept extraction identifies specific named prompts, techniques, or tools — USE THOSE EXACT NAMES
-- Do NOT replace specific details with generic alternatives
-- The "What You'll Need" section must only list tools actually relevant to this specific topic
-- The Step-by-Step Guide must directly address what was withheld, not general background knowledge
-- Be specific. If the creator mentioned 5 prompts, reconstruct all 5 as best you can from context.
-
-Format your response in clean Markdown with exactly these 5 sections."""
+- Adapt the content to make sense for the video (e.g., if it's a movie edit, explain the editing style and story context).
+- Do NOT replace specific details with generic alternatives.
+- The "What You'll Need" section must only list tools actually relevant to this specific topic (e.g., video editors for a movie edit, or 'none' if inapplicable).
+- You MUST format your response in clean Markdown using EXACTLY the 5 sections requested in the prompt, even if you have to adapt their meaning slightly."""
 
 
 def generate_roadmap(concept: dict) -> str:
