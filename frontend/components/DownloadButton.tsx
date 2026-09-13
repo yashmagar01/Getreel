@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { getDownloadUrl } from "@/lib/api";
 
 interface DownloadButtonProps {
@@ -9,15 +9,12 @@ interface DownloadButtonProps {
 
 export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(15 * 60); // 15 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(15 * 60);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
+      setTimeLeft((prev) => {
+        if (prev <= 1) { clearInterval(interval); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -27,7 +24,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
   const handleDownload = () => {
     if (timeLeft === 0) return;
     setIsDownloading(true);
-    
     const url = getDownloadUrl(token);
     const link = document.createElement("a");
     link.href = url;
@@ -35,7 +31,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
     setTimeout(() => setIsDownloading(false), 2000);
   };
 
@@ -45,40 +40,34 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
   const isExpired = timeLeft === 0;
 
   return (
-    <div className="fade-up w-full bg-gray-900 border border-white/10 rounded-2xl p-6 shadow-xl" style={{ animationDelay: '200ms' }}>
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l-4 4m0 0l-4-4m4 4V4M10 18h4a2 2 0 012 2v2H8v-2a2 2 0 012-2z" />
+    <div className="rounded-xl bg-white/[0.03] border border-white/[0.08] p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-white/[0.04] flex items-center justify-center">
+          <svg className="w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
         <div>
-          <h3 className="text-white font-semibold">Reel saved</h3>
-          <p className="text-gray-500 text-xs">Ready for offline viewing</p>
+          <p className="text-sm text-[#f4f4f5] font-medium">Reel saved</p>
+          <p className="text-xs text-[#52525b]">Ready for offline viewing</p>
         </div>
       </div>
 
       <button
         onClick={handleDownload}
         disabled={isDownloading || isExpired}
-        className={`
-          w-full py-4 rounded-xl font-bold transition-all duration-300 shadow-lg
-          ${isExpired 
-            ? "bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5" 
-            : isDownloading
-              ? "bg-blue-900/40 text-blue-300 border border-blue-500/20"
-              : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 hover:scale-[1.02] active:scale-95 shadow-blue-900/20"
-          }
-        `}
+        className={`w-full text-sm py-2.5 rounded-lg transition-colors ${
+          isExpired
+            ? "bg-white/[0.03] text-[#52525b] cursor-not-allowed"
+            : "bg-white/[0.06] hover:bg-white/[0.10] text-[#f4f4f5]"
+        }`}
       >
-        <span>
-          {isExpired ? "Download expired" : isDownloading ? "Preparing..." : "Download .mp4"}
-        </span>
+        {isExpired ? "Download expired" : isDownloading ? "Preparing..." : "Download .mp4"}
       </button>
 
-      <div className="mt-4 flex items-center justify-center gap-2 text-[10px] sm:text-xs">
-        <div className={`w-1.5 h-1.5 rounded-full ${isExpired ? "bg-red-500" : "bg-blue-500 animate-pulse"}`} />
-        <span className={isExpired ? "text-red-400" : "text-gray-400"}>
+      <div className="flex items-center justify-center gap-1.5">
+        <div className={`w-1.5 h-1.5 rounded-full ${isExpired ? "bg-[#ef4444]" : "bg-[#4A90D9] pulse-subtle"}`} />
+        <span className={`text-[10px] ${isExpired ? "text-[#ef4444]" : "text-[#52525b]"}`}>
           {isExpired ? "Link has expired" : `Expires in ${displayTime}`}
         </span>
       </div>

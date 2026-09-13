@@ -1,43 +1,47 @@
 export interface PromisedLink {
-  url: string;
-  description: string;
-  source: "caption" | "transcript" | "bio" | "bio_aggregator" | "targeted_search" | "generic_search";
-  confidence: "high" | "medium" | "low";
+  url?: string;
+  description?: string;
+  source?: string;
+  confidence?: "high" | "medium" | "low";
+  type?: "dm_gate" | "comment_gate";
+  keyword?: string;
+  handle?: string;
+  reel_url?: string;
+  winner_layer?: string;
+  label?: string;
 }
 
 export interface Concept {
   topic: string;
-  target_audience: string;
-  tools_mentioned: string[];
+  target_audience?: string;
+  tools_mentioned?: string[];
   what_creator_withholds?: string;
+  what_creator_shows?: string;
+  key_concepts?: string[];
 }
 
 export interface ProgressEvent {
   type: "progress" | "done" | "error";
   stage?: string;
   message?: string;
-  // present only when type === "done"
   roadmap?: string;
   concept?: Concept;
   promised_link?: PromisedLink | null;
   download_token?: string;
   from_cache?: boolean;
+  capsule_id?: string;
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 function sanitizeErrorMessage(message: string): string {
   if (!message) return "An unexpected error occurred.";
-  
-  // Replace technical Instagram/cookie messages
-  if (message.includes("cookies.txt") || message.includes("Instagram is rate-limiting") || message.includes("expired")) {
+  if (message.includes("cookies.txt") || message.includes("rate-limiting") || message.includes("expired")) {
     return "Instagram access is currently limited. Please try again in a few minutes.";
   }
-  
-  if (message.includes("instagrapi") || message.includes("Login required")) {
+  if (message.includes("Login required")) {
     return "System maintenance in progress. Please try again later.";
   }
-
   return message;
 }
 
@@ -49,7 +53,6 @@ export async function analyzeReel(
     throw new Error("Backend URL is not configured. Set NEXT_PUBLIC_BACKEND_URL.");
   }
 
-  // Step 1: POST /analyze to get job_id
   const response = await fetch(`${BACKEND_URL}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -61,15 +64,12 @@ export async function analyzeReel(
     try {
       const err = await response.json();
       detail = err.detail || detail;
-    } catch {
-      // ignore parse error
-    }
+    } catch {}
     throw new Error(sanitizeErrorMessage(detail));
   }
 
   const { job_id } = await response.json();
 
-  // Step 2: Open SSE connection and listen for events
   return new Promise((resolve, reject) => {
     const eventSource = new EventSource(`${BACKEND_URL}/stream-progress/${job_id}`);
 
@@ -77,18 +77,9 @@ export async function analyzeReel(
       try {
         const event: ProgressEvent = JSON.parse(e.data);
         onProgress(event);
-
-        if (event.type === "done") {
-          eventSource.close();
-          resolve(event);
-        } else if (event.type === "error") {
-          eventSource.close();
-          reject(new Error(sanitizeErrorMessage(event.message || "Pipeline error")));
-        }
-      } catch (err) {
-        eventSource.close();
-        reject(new Error("Failed to parse server response"));
-      }
+        if (event.type === "done") { eventSource.close(); resolve(event); }
+        else if (event.type === "error") { eventSource.close(); reject(new Error(sanitizeErrorMessage(event.message || "Pipeline error"))); }
+      } catch { eventSource.close(); reject(new Error("Failed to parse server response")); }
     };
 
     eventSource.onerror = () => {
@@ -96,11 +87,7 @@ export async function analyzeReel(
       reject(new Error("Lost connection to backend. Render's free tier may be sleeping — please try again."));
     };
 
-    // Safety timeout: 6 minutes
-    setTimeout(() => {
-      eventSource.close();
-      reject(new Error("Analysis timed out after 6 minutes."));
-    }, 360000);
+    setTimeout(() => { eventSource.close(); reject(new Error("Analysis timed out after 6 minutes.")); }, 360000);
   });
 }
 

@@ -14,60 +14,45 @@ interface ParsedSection {
   content: string;
 }
 
-// Parse the 5 fixed markdown sections into an array
+const SECTION_TITLES = [
+  "What This Reel Is Actually Teaching",
+  "What You'll Need",
+  "Step-by-Step Guide",
+  "Common Mistakes to Avoid",
+  "Free Resources to Learn More",
+];
+
 function parseSections(markdown: string): ParsedSection[] {
-  const sectionTitles = [
-    "What This Reel Is Actually Teaching",
-    "What You'll Need",
-    "Step-by-Step Guide",
-    "Common Mistakes to Avoid",
-    "Free Resources to Learn More",
-  ];
-
   const sections: ParsedSection[] = [];
-
-  for (let i = 0; i < sectionTitles.length; i++) {
-    const title = sectionTitles[i];
-    const nextTitle = sectionTitles[i + 1];
-
+  for (let i = 0; i < SECTION_TITLES.length; i++) {
+    const title = SECTION_TITLES[i];
+    const nextTitle = SECTION_TITLES[i + 1];
     const startMarker = `## ${title}`;
     const startIdx = markdown.indexOf(startMarker);
     if (startIdx === -1) continue;
-
     const contentStart = startIdx + startMarker.length;
-    const endIdx = nextTitle
-      ? markdown.indexOf(`## ${nextTitle}`)
-      : markdown.length;
-
-    const content = markdown
-      .slice(contentStart, endIdx === -1 ? markdown.length : endIdx)
-      .trim();
-
+    const endIdx = nextTitle ? markdown.indexOf(`## ${nextTitle}`) : markdown.length;
+    const content = markdown.slice(contentStart, endIdx === -1 ? markdown.length : endIdx).trim();
     sections.push({ title, content });
   }
-
   return sections;
 }
 
-// Parse bullet list items from markdown
 function parseBullets(text: string): string[] {
   return text
     .split("\n")
-    .filter((line) => line.trim().startsWith("*") || line.trim().startsWith("-"))
-    .map((line) => line.replace(/^[\s*\-]+/, "").trim())
+    .filter((l) => l.trim().startsWith("*") || l.trim().startsWith("-"))
+    .map((l) => l.replace(/^[\s*\-]+/, "").trim())
     .filter(Boolean);
 }
 
-// Parse numbered steps
 function parseSteps(text: string): { title: string; description: string }[] {
   const lines = text.split("\n");
   const steps: { title: string; description: string }[] = [];
   let current: { title: string; description: string } | null = null;
-
   for (const line of lines) {
     const matchBold = line.match(/^\d+\.\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
     const matchPlain = line.match(/^(\d+)\.\s+(.*)/);
-
     if (matchBold) {
       if (current) steps.push(current);
       current = { title: matchBold[1].trim(), description: matchBold[2].trim() };
@@ -95,32 +80,10 @@ function parseResources(text: string): { label: string; url?: string }[] {
     .filter((r) => r.label);
 }
 
-// ── Section renderers ──────────────────────────────────────────────────────
-
-function SectionWrapper({ 
-  title, 
-  emoji, 
-  children, 
-  borderColor, 
-  bgColor,
-  delay
-}: { 
-  title: string; 
-  emoji: string; 
-  children: React.ReactNode; 
-  borderColor: string;
-  bgColor: string;
-  delay: string;
-}) {
+function SectionCard({ title, children, delay }: { title: string; children: React.ReactNode; delay: string }) {
   return (
-    <div 
-      className={`fade-up w-full p-6 mb-6 rounded-2xl border border-white/5 border-l-4 ${borderColor} ${bgColor} backdrop-blur-sm`}
-      style={{ animationDelay: delay }}
-    >
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-xl shrink-0">{emoji}</span>
-        <h2 className="text-lg font-semibold text-white tracking-tight">{title}</h2>
-      </div>
+    <div className="fade-up rounded-xl bg-white/[0.02] border border-white/[0.06] p-5 space-y-3" style={{ animationDelay: delay }}>
+      <h3 className="text-sm font-medium text-[#f4f4f5]">{title}</h3>
       {children}
     </div>
   );
@@ -128,150 +91,132 @@ function SectionWrapper({
 
 function TeachingSection({ content, delay }: { content: string; delay: string }) {
   return (
-    <SectionWrapper title="What This Reel Is Actually Teaching" emoji="🎯" borderColor="border-l-purple-500" bgColor="bg-purple-500/5" delay={delay}>
-      <p className="text-gray-300 leading-relaxed text-sm md:text-base">{content}</p>
-    </SectionWrapper>
+    <SectionCard title="What This Reel Is Actually Teaching" delay={delay}>
+      <p className="text-sm text-[#a1a1aa] leading-relaxed">{content}</p>
+    </SectionCard>
   );
 }
 
 function NeedsSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
   return (
-    <SectionWrapper title="What You'll Need" emoji="🛠️" borderColor="border-l-emerald-500" bgColor="bg-emerald-500/5" delay={delay}>
+    <SectionCard title="What You'll Need" delay={delay}>
       <div className="flex flex-wrap gap-2">
         {items.map((item, i) => (
-          <div key={i} className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium">
+          <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-[#a1a1aa]">
             {item}
-          </div>
+          </span>
         ))}
       </div>
-    </SectionWrapper>
+    </SectionCard>
   );
 }
 
 function StepsSection({ content, delay }: { content: string; delay: string }) {
   const steps = parseSteps(content);
   const [activeStep, setActiveStep] = useState<number | null>(null);
-
   return (
-    <SectionWrapper title="Step-by-Step Guide" emoji="📋" borderColor="border-l-blue-500" bgColor="bg-blue-500/5" delay={delay}>
-      <div className="space-y-2">
+    <SectionCard title="Step-by-Step Guide" delay={delay}>
+      <div className="space-y-1.5">
         {steps.map((step, i) => (
           <div
             key={i}
-            className={`group rounded-xl border border-white/5 transition-all duration-200 cursor-pointer ${
-              activeStep === i ? "bg-blue-950/30 border-blue-500/30" : "bg-white/5 hover:bg-white/10"
+            className={`rounded-lg border transition-all duration-200 cursor-pointer ${
+              activeStep === i ? "bg-white/[0.04] border-white/[0.10]" : "bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.03]"
             }`}
             onClick={() => setActiveStep(activeStep === i ? null : i)}
           >
-            <div className="flex items-center gap-4 p-4">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border transition-colors ${
-                activeStep === i ? "bg-blue-500 text-white border-blue-400" : "bg-gray-800 text-gray-400 border-white/5"
-              }`}>
-                {i + 1}
-              </div>
-              <div className="flex-1 font-medium text-gray-200 text-sm">{step.title}</div>
-              <svg className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${activeStep === i ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <div className="flex items-center gap-3 p-3">
+              <span className="text-xs font-mono text-[#52525b] w-5">{i + 1}</span>
+              <span className="flex-1 text-sm text-[#d4d4d8]">{step.title}</span>
+              <svg className={`w-3 h-3 text-[#52525b] transition-transform ${activeStep === i ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
-            {activeStep === i && (
-              <div className="px-16 pb-4 text-sm text-gray-400 leading-relaxed animate-in fade-in slide-in-from-top-1">
+            {activeStep === i && step.description && (
+              <div className="px-11 pb-3 text-xs text-[#71717a] leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {step.description}
               </div>
             )}
           </div>
         ))}
       </div>
-    </SectionWrapper>
+    </SectionCard>
   );
 }
 
 function MistakesSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
   return (
-    <SectionWrapper title="Common Mistakes to Avoid" emoji="⚠️" borderColor="border-l-red-500" bgColor="bg-red-500/5" delay={delay}>
+    <SectionCard title="Common Mistakes to Avoid" delay={delay}>
       <div className="space-y-2">
         {items.map((item, i) => (
-          <div key={i} className="flex gap-3 p-3 rounded-lg bg-red-500/5 text-red-200 text-sm leading-relaxed">
-            <span className="text-red-500 font-bold shrink-0">✕</span>
+          <div key={i} className="flex gap-2 text-sm text-[#a1a1aa] leading-relaxed">
+            <span className="text-[#ef4444] shrink-0 mt-0.5">&#10005;</span>
             {item}
           </div>
         ))}
       </div>
-    </SectionWrapper>
+    </SectionCard>
   );
 }
 
 function ResourcesSection({ content, delay }: { content: string; delay: string }) {
   const resources = parseResources(content);
   return (
-    <SectionWrapper title="Free Resources to Learn More" emoji="📚" borderColor="border-l-amber-500" bgColor="bg-amber-500/5" delay={delay}>
-      <div className="grid gap-2">
-        {resources.map((r, i) => (
+    <SectionCard title="Free Resources to Learn More" delay={delay}>
+      <div className="space-y-1.5">
+        {resources.map((r, i) =>
           r.url ? (
             <a
               key={i}
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/15 text-amber-200 text-sm transition-all group"
+              className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.04] text-sm text-[#a1a1aa] transition-colors group"
             >
               <span>{r.label}</span>
-              <svg className="w-4 h-4 opacity-50 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              <svg className="w-3 h-3 text-[#52525b] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             </a>
           ) : (
-            <div key={i} className="p-3 rounded-lg bg-gray-800/40 text-gray-400 text-sm">
-              {r.label}
-            </div>
+            <div key={i} className="p-2.5 text-sm text-[#52525b]">{r.label}</div>
           )
-        ))}
+        )}
       </div>
-    </SectionWrapper>
+    </SectionCard>
   );
 }
 
 export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSection }: RoadmapDisplayProps) {
   const sections = parseSections(roadmap);
-
   const renderSection = (section: ParsedSection, index: number) => {
-    // Determine delay for fade-up (index * 80ms)
-    const delay = `${index * 80}ms`;
-
-    // If singleSection is specified, only render that section
+    const delay = `${index * 100}ms`;
     if (singleSection && section.title !== singleSection) return null;
-
     if (skipFirst && section.title === "What This Reel Is Actually Teaching") return null;
-
     switch (section.title) {
-      case "What This Reel Is Actually Teaching":
-        return <TeachingSection key={section.title} content={section.content} delay={delay} />;
-      case "What You'll Need":
-        return <NeedsSection key={section.title} content={section.content} delay={delay} />;
-      case "Step-by-Step Guide":
-        return <StepsSection key={section.title} content={section.content} delay={delay} />;
-      case "Common Mistakes to Avoid":
-        return <MistakesSection key={section.title} content={section.content} delay={delay} />;
-      case "Free Resources to Learn More":
-        return <ResourcesSection key={section.title} content={section.content} delay={delay} />;
-      default:
-        return null;
+      case "What This Reel Is Actually Teaching": return <TeachingSection key={section.title} content={section.content} delay={delay} />;
+      case "What You'll Need": return <NeedsSection key={section.title} content={section.content} delay={delay} />;
+      case "Step-by-Step Guide": return <StepsSection key={section.title} content={section.content} delay={delay} />;
+      case "Common Mistakes to Avoid": return <MistakesSection key={section.title} content={section.content} delay={delay} />;
+      case "Free Resources to Learn More": return <ResourcesSection key={section.title} content={section.content} delay={delay} />;
+      default: return null;
     }
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      {sections.length > 0 ? (
-        sections.map((section, idx) => renderSection(section, idx))
-      ) : (
-        <div className="p-6 rounded-2xl bg-gray-900 border border-white/10 text-gray-500 text-sm">
-          Could not parse roadmap sections. Raw output below:
-          <pre className="mt-4 p-4 rounded bg-black/40 overflow-x-auto text-[10px] sm:text-xs text-gray-500 whitespace-pre-wrap">
-            {roadmap}
-          </pre>
+    <div className="space-y-4">
+      {fromCache && (
+        <div className="flex items-center gap-2 text-xs text-[#52525b]">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Cached result
         </div>
+      )}
+      {sections.length > 0 ? sections.map((s, i) => renderSection(s, i)) : (
+        <pre className="text-xs text-[#52525b] whitespace-pre-wrap">{roadmap}</pre>
       )}
     </div>
   );
