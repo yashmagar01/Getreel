@@ -31,7 +31,7 @@ class GroqProvider(LLMProvider):
         from groq import Groq
         client = Groq(api_key=self.api_key)
         response = client.chat.completions.create(
-            model=model or "openai/gpt-oss-20b",
+            model=model or "openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -166,6 +166,11 @@ def complete_with_fallback(
                 temperature=temperature,
                 model=model,
             )
+            
+            # Guard against models that return empty/whitespace or hallucinated blank text
+            if not result or len(result.strip()) < 5:
+                raise ValueError(f"Provider returned an empty or abnormally short response ({len(result if result else '')} chars).")
+                
             logger.info(f"[PROVIDER] {provider.name} — success ({len(result)} chars)")
             return result
         except Exception as e:
