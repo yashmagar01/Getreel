@@ -32,4 +32,17 @@ if [ ! -f "bin/deno" ]; then
 fi
 chmod +x bin/deno
 
-echo "FFmpeg and Deno installation completed successfully."
+# AtomicParsley — required by yt-dlp EmbedThumbnail for mp4 metadata.
+# Best-effort: apt may not be available on all Render stacks, so never fail the build.
+if ! command -v AtomicParsley >/dev/null 2>&1 && [ ! -f "bin/AtomicParsley" ]; then
+  echo "Installing AtomicParsley for mp4 thumbnail/metadata..."
+  (apt-get update && apt-get install -y atomicparsley || true)
+  if ! command -v AtomicParsley >/dev/null 2>&1; then
+    echo "apt failed, trying static binary..."
+    (curl -L https://github.com/wez/atomicparsley/releases/latest/download/AtomicParsleyLinux.zip -o ap.zip \
+      && python -m zipfile -e ap.zip bin/ && rm ap.zip || true)
+  fi
+fi
+chmod +x bin/AtomicParsley 2>/dev/null || true
+
+echo "FFmpeg, Deno and AtomicParsley installation completed successfully."

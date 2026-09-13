@@ -14,5 +14,7 @@ services:
         sync: false
       - key: INSTAGRAM_COOKIES_PATH
         sync: false
+      - key: YOUTUBE_COOKIES_PATH
+        sync: false
       - key: ALLOWED_ORIGINS
         sync: false
