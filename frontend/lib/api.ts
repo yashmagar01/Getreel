@@ -20,10 +20,19 @@ export interface Concept {
   key_concepts?: string[];
 }
 
+export interface ReelMeta {
+  title: string;
+  author_name: string;
+  username: string;
+  thumbnail_url: string;
+  shortcode: string;
+}
+
 export interface ProgressEvent {
-  type: "progress" | "done" | "error";
+  type: "progress" | "meta" | "done" | "error";
   stage?: string;
   message?: string;
+  meta?: ReelMeta;
   roadmap?: string;
   concept?: Concept;
   promised_link?: PromisedLink | null;
