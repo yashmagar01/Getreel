@@ -33,8 +33,12 @@ from job_store import (
     register_download, get_download_path, delete_download_token,
     cleanup_expired_downloads
 )
+from capsule_store import create_capsule, get_capsule
 import json
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi import BackgroundTasks
+import yt_downloader
+import os
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -42,6 +46,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+
+class YTDownloadRequest(BaseModel):
+    url: str
+    quality: str = "best" # e.g., '1080p', '720p', '480p', 'audio', 'best'
+
 
 # ── URL Validation ────────────────────────────────────────────────────────────
 INSTAGRAM_REEL_PATTERN = re.compile(
@@ -263,6 +274,17 @@ async def analyze(request: AnalyzeRequest, req: Request):
 
             # Cache
             save_result(url, transcript, concept, roadmap, promised_link)
+
+            # Create shareable capsule
+            capsule_data = {
+                "reel_url": url,
+                "topic": concept.get("topic", ""),
+                "transcript": transcript,
+                "concept_summary": concept,
+                "roadmap_markdown": roadmap,
+                "promised_link": promised_link,
+            }
+            capsule_id = create_capsule(capsule_data)
             
             await queue.put({
                 "type": "done",
@@ -270,7 +292,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 "concept": concept,
                 "promised_link": promised_link,
                 "download_token": download_token,
-                "from_cache": False
+                "from_cache": False,
+                "capsule_id": capsule_id,
             })
 
         except Exception as e:
@@ -301,3 +324,53 @@ async def analyze(request: AnalyzeRequest, req: Request):
     asyncio.create_task(run_pipeline())
 
     return JSONResponse({"job_id": job_id})
+
+
+# ── Capsule Endpoints ──────────────────────────────────────────────────────────
+
+capsule_results: dict[str, dict] = {}
+
+@app.post("/capsule")
+async def save_capsule(data: dict):
+    capsule_id = create_capsule(data)
+    return {"capsule_id": capsule_id}
+
+@app.get("/capsule/{capsule_id}")
+async def get_capsule_endpoint(capsule_id: str):
+    data = get_capsule(capsule_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Capsule not found")
+    return data
+
+
+@app.post("/api/youtube/download")
+async def download_youtube(req: YTDownloadRequest):
+    try:
+        file_path, work_dir, title = await yt_downloader.download_yt_video(req.url, req.quality)
+
+        ext = os.path.splitext(file_path)[1]  # .mp4 or .m4a
+        is_audio = (req.quality == "audio")
+        safe_title = yt_downloader._safe_filename(title)
+        filename = f"{safe_title}{ext}"
+        media_type = "audio/mp4" if is_audio else "video/mp4"
+
+        async def stream_and_cleanup():
+            try:
+                with open(file_path, "rb") as f:
+                    while chunk := f.read(1024 * 1024):  # 1 MB chunks
+                        yield chunk
+            finally:
+                shutil.rmtree(work_dir, ignore_errors=True)
+                logger.info(f"YT download complete, cleaned up {work_dir}")
+
+        return StreamingResponse(
+            stream_and_cleanup(),
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+    except Exception as e:
+        logger.error(f"YouTube download failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
