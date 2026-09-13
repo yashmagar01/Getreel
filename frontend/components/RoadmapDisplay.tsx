@@ -1,7 +1,65 @@
 "use client";
 
 import { useState } from "react";
+import React from "react";
 import Card from "@/components/ui/Card";
+
+// ── Markdown Formatter ────────────────────────────────────────────────────────
+function RichText({ text }: { text: string }) {
+  if (!text) return null;
+  
+  // Split by code blocks (```language ... ```)
+  const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/g;
+  const blocks = text.split(codeBlockRegex);
+
+  return (
+    <>
+      {blocks.map((block, index) => {
+        // Odd indices are the captured code blocks
+        if (index % 2 === 1) {
+          return (
+            <div key={index} className="my-3 bg-[#111113] border border-white/10 rounded-md p-3 overflow-x-auto text-xs font-mono text-[#a1a1aa] shadow-inner">
+              <pre>{block.trim()}</pre>
+            </div>
+          );
+        }
+
+        // Even indices are normal text
+        const lines = block.split('\n');
+        return (
+          <React.Fragment key={index}>
+            {lines.map((line, lineIdx) => {
+              const parts = line.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.+?\]\(https?:\/\/.+?\))/g);
+              const lineContent = parts.map((part, i) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                  return <strong key={i} className="text-[var(--text-primary)] font-semibold">{part.slice(2, -2)}</strong>;
+                }
+                if (part.startsWith('*') && part.endsWith('*')) {
+                  return <em key={i}>{part.slice(1, -1)}</em>;
+                }
+                if (part.startsWith('`') && part.endsWith('`')) {
+                  return <code key={i} className="bg-[var(--bg-elevated)] border border-[var(--border-default)] px-1.5 py-0.5 rounded text-xs text-[var(--text-primary)]">{part.slice(1, -1)}</code>;
+                }
+                const linkMatch = part.match(/^\[(.+?)\]\((https?:\/\/.+?)\)$/);
+                if (linkMatch) {
+                  return <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="text-[var(--brand-solid)] hover:underline">{linkMatch[1]}</a>;
+                }
+                return <span key={i}>{part}</span>;
+              });
+              
+              return (
+                <React.Fragment key={lineIdx}>
+                  {lineContent}
+                  {lineIdx < lines.length - 1 && <br />}
+                </React.Fragment>
+              );
+            })}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
 
 interface RoadmapDisplayProps {
   roadmap: string;
@@ -52,16 +110,50 @@ function parseSteps(text: string): { title: string; description: string }[] {
   const steps: { title: string; description: string }[] = [];
   let current: { title: string; description: string } | null = null;
   for (const line of lines) {
+    const matchHeader = line.match(/^###\s+(?:Step\s*\d*[:\-]?\s*)?(.*)/i);
     const matchBold  = line.match(/^\d+\.\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
     const matchPlain = line.match(/^(\d+)\.\s+(.*)/);
-    if (matchBold) {
+    const matchBulletBold = line.match(/^[\*\-]\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
+
+    if (matchHeader) {
+      if (current) steps.push(current);
+      current = { title: matchHeader[1].trim(), description: "" };
+    } else if (matchBold) {
       if (current) steps.push(current);
       current = { title: matchBold[1].trim(), description: matchBold[2].trim() };
+    } else if (matchBulletBold) {
+      if (current) steps.push(current);
+      current = { title: matchBulletBold[1].trim(), description: matchBulletBold[2].trim() };
     } else if (matchPlain) {
       if (current) steps.push(current);
-      current = { title: `Step ${matchPlain[1]}`, description: matchPlain[2].trim() };
+      
+      let desc = matchPlain[2].trim();
+      let title = "";
+      
+      const colonIdx = desc.indexOf(':');
+      const dotIdx = desc.indexOf('.');
+      
+      if (colonIdx > 0 && colonIdx < 50) {
+        title = desc.slice(0, colonIdx).trim();
+        desc = desc.slice(colonIdx + 1).trim();
+      } else if (dotIdx > 0 && dotIdx < 50) {
+        title = desc.slice(0, dotIdx).trim();
+        desc = desc.slice(dotIdx + 1).trim();
+      } else {
+        if (desc.length < 60) {
+          title = desc;
+          desc = "";
+        } else {
+          const words = desc.split(' ');
+          title = words.slice(0, 5).join(' ') + '...';
+        }
+      }
+      current = { title: title.replace(/\*\*/g, '').replace(/\*/g, ''), description: desc };
     } else if (current && line.trim()) {
-      current.description += " " + line.trim();
+      current.description += "\n" + line.trim();
+    } else if (!current && line.trim()) {
+      // Prevent dropping text if the AI starts dumping text before formatting a step
+      current = { title: "Overview", description: line.trim() };
     }
   }
   if (current) steps.push(current);
@@ -110,7 +202,9 @@ function SectionCard({ title, accentColor, children, delay }: {
 function TeachingSection({ content, delay }: { content: string; delay: string }) {
   return (
     <SectionCard title="What This Reel Is Actually Teaching" delay={delay}>
-      <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{content}</p>
+      <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+        <RichText text={content} />
+      </p>
     </SectionCard>
   );
 }
@@ -125,7 +219,7 @@ function NeedsSection({ content, delay }: { content: string; delay: string }) {
             key={i}
             className="text-xs px-3 py-1.5 rounded-[var(--radius-pill)] bg-[var(--brand-dim)] border border-[var(--brand-border)] text-[var(--brand-solid)] font-medium"
           >
-            {item}
+            <RichText text={item} />
           </span>
         ))}
       </div>
@@ -157,7 +251,9 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
               >
                 {i + 1}
               </div>
-              <span className="flex-1 text-sm text-[var(--text-primary)] font-medium">{step.title}</span>
+              <span className="flex-1 text-sm text-[var(--text-primary)] font-medium">
+                <RichText text={step.title} />
+              </span>
               <svg
                 className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${activeStep === i ? "rotate-180" : ""}`}
                 fill="none"
@@ -170,7 +266,7 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
             </div>
             {activeStep === i && step.description && (
               <div className="px-12 pb-3 text-xs text-[var(--text-secondary)] leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-200">
-                {step.description}
+                <RichText text={step.description} />
               </div>
             )}
           </div>
@@ -188,7 +284,7 @@ function MistakesSection({ content, delay }: { content: string; delay: string })
         {items.map((item, i) => (
           <div key={i} className="flex gap-2.5 text-sm text-[var(--text-secondary)] leading-relaxed">
             <span className="text-[var(--accent-red)] shrink-0 mt-0.5 font-bold">✕</span>
-            {item}
+            <div><RichText text={item} /></div>
           </div>
         ))}
       </div>
@@ -260,7 +356,13 @@ export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSe
       )}
       {sections.length > 0
         ? sections.map((s, i) => renderSection(s, i))
-        : <pre className="text-xs text-[var(--text-muted)] whitespace-pre-wrap">{roadmap}</pre>
+        : (
+            <SectionCard title="Analysis" delay="0ms">
+              <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                <RichText text={roadmap} />
+              </div>
+            </SectionCard>
+          )
       }
     </div>
   );

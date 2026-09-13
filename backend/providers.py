@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class LLMProvider:
     """Protocol for an LLM completion provider."""
 
-    def complete(self, system_prompt: str, user_prompt: str, max_tokens: int = 1000, temperature: float = 0) -> str:
+    def complete(self, system_prompt: str, user_prompt: str, max_tokens: int = 1000, temperature: float = 0, model: str = None) -> str:
         ...
 
     @property
@@ -31,7 +31,7 @@ class GroqProvider(LLMProvider):
         from groq import Groq
         client = Groq(api_key=self.api_key)
         response = client.chat.completions.create(
-            model=model or "llama3-70b-8192",
+            model=model or "openai/gpt-oss-20b",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
