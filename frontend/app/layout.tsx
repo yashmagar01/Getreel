@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-jakarta",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Reel Decoder — Decode Instagram Reels Instantly",
+  title: "GetReel — Decode Reels & Download Videos Instantly",
   description:
-    "Paste any Instagram Reel URL. AI extracts the hidden roadmap, promised links, and resources — no follows, no comments, no waiting.",
+    "Paste any Instagram Reel or YouTube URL. AI extracts the hidden roadmap, promised links, and resources — or download the video in your chosen quality. No follows, no comments, no waiting.",
 };
 
 export default function RootLayout({
@@ -20,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} dark`}>
-      <body className="font-sans antialiased bg-[#111213] text-[#f4f4f5]">
+    <html lang="en" className={jakarta.variable}>
+      <body className="font-sans antialiased" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
         {children}
       </body>
     </html>

@@ -1,23 +1,27 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import UrlInput from "@/components/UrlInput";
-import YoutubeDownloader from "@/components/YoutubeDownloader";
+import LinkInputCard from "@/components/LinkInputCard";
 import LoadingState from "@/components/LoadingState";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
 import PromisedLinkCTA from "@/components/PromisedLinkCTA";
 import { DownloadButton } from "@/components/DownloadButton";
 import CapsuleShare from "@/components/CapsuleShare";
+import PlatformIconGrid from "@/components/ui/PlatformIconGrid";
+import Onboarding from "@/components/Onboarding";
+import BottomNav from "@/components/BottomNav";
 import { analyzeReel, type ProgressEvent } from "@/lib/api";
 
 type Result = ProgressEvent;
+type Platform = "instagram" | "youtube" | null;
 
 export default function Home() {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading]       = useState(false);
   const [currentStage, setCurrentStage] = useState<string>("");
-  const [result, setResult] = useState<Result | null>(null);
+  const [result, setResult]             = useState<Result | null>(null);
   const [downloadToken, setDownloadToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]               = useState<string | null>(null);
+  const [activePlatform, setActivePlatform] = useState<Platform>(null);
 
   const handleAnalyze = async (url: string) => {
     setIsLoading(true);
@@ -49,153 +53,190 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen relative">
-      {/* ── VIEW: Idle / Input ── */}
-      {!result && !isLoading && (
-        <div className="flex flex-col items-center px-6 pt-24 pb-24 max-w-3xl mx-auto min-h-screen">
-          <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-xs font-medium tracking-widest uppercase text-[#71717a]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4A90D9] pulse-subtle" />
-            AI-Powered Reel Decoder
+    <>
+      <Onboarding />
+
+      <main className="min-h-screen relative pb-16 md:pb-0">
+
+        {/* ── VIEW: Idle / Input ─────────────────────────────────────────── */}
+        {!result && !isLoading && (
+          <div className="flex flex-col items-center px-6 pt-20 pb-24 max-w-3xl mx-auto min-h-screen">
+
+            {/* Badge */}
+            <div className="mb-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[var(--radius-pill)] bg-[var(--brand-dim)] border border-[var(--brand-border)] text-xs font-semibold tracking-widest uppercase text-[var(--brand-solid)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand-solid)] pulse-subtle" />
+              AI-Powered · Video Tools
+            </div>
+
+            {/* Hero */}
+            <h1 className="text-4xl md:text-[3.5rem] font-bold text-center mb-4 leading-tight tracking-tight text-balance max-w-2xl text-[var(--text-primary)]">
+              Paste a link.{" "}
+              <span className="shimmer-text">Get everything.</span>
+            </h1>
+
+            <p className="text-[var(--text-secondary)] text-center text-base md:text-lg max-w-md mb-10 leading-relaxed">
+              Decode any Instagram Reel — AI extracts the roadmap, links, and resources. Or download any YouTube video in seconds.
+            </p>
+
+            {/* Unified input */}
+            <LinkInputCard
+              onInstagramSubmit={handleAnalyze}
+              isLoading={isLoading}
+              error={error || ""}
+              onPlatformChange={setActivePlatform}
+            />
+
+            {/* Platform grid */}
+            <div className="mt-10 flex flex-col items-center gap-3">
+              <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest font-semibold">Supported platforms</p>
+              <PlatformIconGrid activePlatform={activePlatform} />
+            </div>
+
+            {/* Feature pills */}
+            <div className="flex flex-wrap gap-2 mt-10 justify-center">
+              {[
+                "Audio Transcribed",
+                "Frames Analyzed",
+                "AI Roadmap",
+                "Results Cached",
+                "YT Quality Picker",
+              ].map((label) => (
+                <span
+                  key={label}
+                  className="text-xs px-3 py-1.5 rounded-[var(--radius-pill)] bg-white border border-[var(--border-default)] text-[var(--text-muted)] tracking-wide shadow-[var(--shadow-sm)]"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
+        )}
 
-          <h1 className="text-4xl md:text-6xl font-light text-center mb-4 leading-tight tracking-tight text-balance max-w-2xl">
-            Decode any Instagram Reel
-          </h1>
-
-          <p className="text-[#71717a] text-center text-base md:text-lg max-w-md mb-10 leading-relaxed">
-            Paste a reel URL. Get the complete roadmap, resources, and promised links — no follows, no comments, no waiting.
-          </p>
-
-          <UrlInput
-                      onSubmit={handleAnalyze}
-                      isLoading={isLoading}
-                      error={error || ""}
-                    />
-
-          <div className="flex flex-wrap gap-2 mt-10 justify-center">
-            {[
-              "Audio Transcribed",
-              "Frames Analyzed",
-              "AI Roadmap",
-              "Results Cached",
-            ].map((label) => (
-              <span
-                key={label}
-                className="text-xs px-3 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-[#52525b] tracking-wide"
-              >
-                {label}
-              </span>
-            ))}
+        {/* ── VIEW: Loading ──────────────────────────────────────────────── */}
+        {isLoading && (
+          <div className="min-h-screen flex items-center justify-center px-6">
+            <LoadingState currentStage={currentStage} />
           </div>
+        )}
 
-          <YoutubeDownloader />
-        </div>
-      )}
+        {/* ── VIEW: Result ───────────────────────────────────────────────── */}
+        {result && !isLoading && (
+          <div className="animate-in fade-in duration-500">
+            {/* Sticky header */}
+            <header className="sticky top-0 z-50 border-b border-[var(--border-default)] bg-white/90 backdrop-blur-xl shadow-[var(--shadow-sm)]">
+              <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--brand-solid)] transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                  </svg>
+                  Decode another
+                </button>
 
-      {/* ── VIEW: Loading ── */}
-      {isLoading && (
-        <div className="min-h-screen flex items-center justify-center px-6">
-          <LoadingState currentStage={currentStage} />
-        </div>
-      )}
-
-      {/* ── VIEW: Result ── */}
-      {result && !isLoading && (
-        <div className="animate-in fade-in duration-500">
-          <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#111213]/80 backdrop-blur-xl">
-            <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-              <button
-                onClick={handleReset}
-                className="text-sm text-[#71717a] hover:text-[#f4f4f5] transition-colors"
-              >
-                &larr; Decode another
-              </button>
-
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#4A90D9] bg-[#4A90D9]/[0.08] px-2.5 py-1 rounded">
+                <span
+                  className="text-[10px] font-bold tracking-[0.15em] uppercase text-white px-3 py-1.5 rounded-[var(--radius-pill)]"
+                  style={{ background: "var(--brand-gradient)" }}
+                >
                   Analysis Complete
                 </span>
               </div>
-            </div>
-          </header>
+            </header>
 
-          <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
-            <section className="space-y-4">
-              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#52525b]">
-                Topic
-              </div>
-              <h2 className="text-2xl md:text-4xl font-light leading-tight text-balance">
-                {result.concept?.topic || "What this reel is actually teaching"}
-              </h2>
-              {result.concept?.target_audience && (
-                <div className="flex items-center gap-2 text-sm text-[#71717a]">
-                  <span className="text-[10px] uppercase tracking-wider text-[#52525b]">Audience</span>
-                  <span className="w-1 h-1 rounded-full bg-[#3f3f46]" />
-                  <span>{result.concept.target_audience}</span>
+            <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
+
+              {/* Topic */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-5 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                  <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Topic</p>
                 </div>
-              )}
-            </section>
-
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
-              <div className="min-h-[180px]">
-                {result.promised_link ? (
-                  <PromisedLinkCTA link={result.promised_link} />
-                ) : (
-                  <div className="h-full flex items-center justify-center p-8 rounded-xl bg-white/[0.03] border border-dashed border-white/[0.06] text-[#52525b] text-sm text-center">
-                    No specific link was mentioned in this reel.
+                <h2 className="text-2xl md:text-4xl font-bold leading-tight text-balance text-[var(--text-primary)]">
+                  {result.concept?.topic || "What this reel is actually teaching"}
+                </h2>
+                {result.concept?.target_audience && (
+                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Audience</span>
+                    <span className="w-1 h-1 rounded-full bg-[var(--border-active)]" />
+                    <span>{result.concept.target_audience}</span>
                   </div>
                 )}
-              </div>
-
-              <div className="space-y-3">
-                {downloadToken && (
-                  <div className="fade-up" style={{ animationDelay: "100ms" }}>
-                    <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#52525b] mb-2">
-                      Download
-                    </div>
-                    <DownloadButton token={downloadToken} />
-                  </div>
-                )}
-
-                {result.roadmap && (
-                  <div className="fade-up" style={{ animationDelay: "200ms" }}>
-                    <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#52525b] mb-2">
-                      Share
-                    </div>
-                    <CapsuleShare result={result} capsuleId={result.capsule_id} />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {result.roadmap && (
-              <section className="space-y-6 pt-4 border-t border-white/[0.06]">
-                <div className="flex items-center gap-4">
-                  <div className="h-px flex-1 bg-white/[0.04]" />
-                  <h3 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#52525b]">
-                    Roadmap
-                  </h3>
-                  <div className="h-px flex-1 bg-white/[0.04]" />
-                </div>
-                <RoadmapDisplay
-                  roadmap={result.roadmap}
-                  fromCache={result.from_cache || false}
-                  skipFirst={true}
-                />
               </section>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* ── Footer ── */}
-      {!isLoading && (
-        <footer className="w-full py-12 text-center border-t border-white/[0.04]">
-          <p className="text-xs text-[#3f3f46] tracking-wide">
-            Reel Decoder &mdash; No follows. No comments. No waiting.
-          </p>
-        </footer>
-      )}
-    </main>
+              {/* Cards grid */}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
+                <div className="min-h-[180px]">
+                  {result.promised_link ? (
+                    <PromisedLinkCTA link={result.promised_link} />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center gap-3 p-8 rounded-[var(--radius-lg)] bg-white border border-[var(--border-default)] shadow-[var(--shadow-sm)] text-center">
+                      <div className="w-10 h-10 rounded-[var(--radius-pill)] bg-[var(--bg-hover)] flex items-center justify-center">
+                        <svg className="w-5 h-5 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text-primary)]">No link found</p>
+                        <p className="text-xs text-[var(--text-muted)] mt-0.5">No specific link was mentioned in this reel.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {downloadToken && (
+                    <div className="fade-up" style={{ animationDelay: "100ms" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Download</p>
+                      </div>
+                      <DownloadButton token={downloadToken} />
+                    </div>
+                  )}
+
+                  {result.roadmap && (
+                    <div className="fade-up" style={{ animationDelay: "200ms" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Share</p>
+                      </div>
+                      <CapsuleShare result={result} capsuleId={result.capsule_id} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Roadmap */}
+              {result.roadmap && (
+                <section className="space-y-6 pt-4 border-t border-[var(--border-default)]">
+                  <div className="flex items-center gap-4">
+                    <div className="h-px flex-1 bg-[var(--border-default)]" />
+                    <h3 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Roadmap</h3>
+                    <div className="h-px flex-1 bg-[var(--border-default)]" />
+                  </div>
+                  <RoadmapDisplay
+                    roadmap={result.roadmap}
+                    fromCache={result.from_cache || false}
+                    skipFirst={true}
+                  />
+                </section>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Footer ────────────────────────────────────────────────────── */}
+        {!isLoading && (
+          <footer className="w-full py-10 text-center border-t border-[var(--border-default)] bg-white">
+            <p className="text-xs text-[var(--text-muted)] tracking-wide">
+              GetReel &mdash; No follows. No comments. No waiting.
+            </p>
+          </footer>
+        )}
+      </main>
+
+      <BottomNav />
+    </>
   );
 }

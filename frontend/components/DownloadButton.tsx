@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { getDownloadUrl } from "@/lib/api";
+import Card from "@/components/ui/Card";
+import PrimaryButton from "@/components/ui/PrimaryButton";
 
 interface DownloadButtonProps {
   token: string;
@@ -9,7 +11,7 @@ interface DownloadButtonProps {
 
 export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(15 * 60);
+  const [timeLeft, setTimeLeft]           = useState(15 * 60);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -24,9 +26,9 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
   const handleDownload = () => {
     if (timeLeft === 0) return;
     setIsDownloading(true);
-    const url = getDownloadUrl(token);
+    const url  = getDownloadUrl(token);
     const link = document.createElement("a");
-    link.href = url;
+    link.href  = url;
     link.setAttribute("download", "");
     document.body.appendChild(link);
     link.click();
@@ -34,43 +36,65 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({ token }) => {
     setTimeout(() => setIsDownloading(false), 2000);
   };
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  const minutes    = Math.floor(timeLeft / 60);
+  const seconds    = timeLeft % 60;
   const displayTime = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  const isExpired = timeLeft === 0;
+  const isExpired  = timeLeft === 0;
+  // Expiry progress bar: starts full and drains
+  const expiryPct = Math.round((timeLeft / (15 * 60)) * 100);
 
   return (
-    <div className="rounded-xl bg-white/[0.03] border border-white/[0.08] p-4 space-y-3">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-white/[0.04] flex items-center justify-center">
-          <svg className="w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
+    <Card variant="default" padding="md">
+      <div className="space-y-4">
+        {/* Header row */}
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-[var(--radius-pill)] flex items-center justify-center shadow-[var(--shadow-brand)]"
+            style={{ background: isExpired ? "var(--bg-hover)" : "var(--brand-gradient)" }}
+          >
+            <svg
+              className="w-4 h-4 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Reel saved</p>
+            <p className="text-xs text-[var(--text-muted)]">Ready for offline viewing</p>
+          </div>
         </div>
+
+        {/* Expiry countdown bar */}
         <div>
-          <p className="text-sm text-[#f4f4f5] font-medium">Reel saved</p>
-          <p className="text-xs text-[#52525b]">Ready for offline viewing</p>
+          <div className="w-full h-1.5 rounded-[var(--radius-pill)] bg-[var(--border-default)] overflow-hidden">
+            <div
+              className="h-full rounded-[var(--radius-pill)] transition-all duration-1000 ease-linear"
+              style={{
+                width: `${expiryPct}%`,
+                background: isExpired ? "var(--accent-red)" : "var(--brand-gradient)",
+              }}
+            />
+          </div>
+          <p className={`text-[10px] mt-1 text-right ${isExpired ? "text-[var(--accent-red)]" : "text-[var(--text-muted)]"}`}>
+            {isExpired ? "Link has expired" : `Expires in ${displayTime}`}
+          </p>
         </div>
-      </div>
 
-      <button
-        onClick={handleDownload}
-        disabled={isDownloading || isExpired}
-        className={`w-full text-sm py-2.5 rounded-lg transition-colors ${
-          isExpired
-            ? "bg-white/[0.03] text-[#52525b] cursor-not-allowed"
-            : "bg-white/[0.06] hover:bg-white/[0.10] text-[#f4f4f5]"
-        }`}
-      >
-        {isExpired ? "Download expired" : isDownloading ? "Preparing..." : "Download .mp4"}
-      </button>
-
-      <div className="flex items-center justify-center gap-1.5">
-        <div className={`w-1.5 h-1.5 rounded-full ${isExpired ? "bg-[#ef4444]" : "bg-[#4A90D9] pulse-subtle"}`} />
-        <span className={`text-[10px] ${isExpired ? "text-[#ef4444]" : "text-[#52525b]"}`}>
-          {isExpired ? "Link has expired" : `Expires in ${displayTime}`}
-        </span>
+        {/* CTA */}
+        <PrimaryButton
+          onClick={handleDownload}
+          disabled={isDownloading || isExpired}
+          loading={isDownloading}
+          className="w-full justify-center"
+          variant={isExpired ? "outline" : "gradient"}
+        >
+          {isExpired ? "Download expired" : isDownloading ? "Preparing…" : "Download .mp4"}
+        </PrimaryButton>
       </div>
-    </div>
+    </Card>
   );
 };

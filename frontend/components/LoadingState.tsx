@@ -1,14 +1,16 @@
 "use client";
 
+import ProgressBar from "@/components/ui/ProgressBar";
+
 const STAGES = [
-  { key: "rate_limit",  label: "Checking limits" },
-  { key: "cache",       label: "Checking cache" },
-  { key: "download",    label: "Downloading reel" },
-  { key: "transcribe",  label: "Transcribing audio" },
-  { key: "frames",      label: "Extracting frames" },
-  { key: "analyze",     label: "Analyzing content" },
-  { key: "link",        label: "Finding promised link" },
-  { key: "roadmap",     label: "Writing guide" },
+  { key: "rate_limit",  label: "Checking limits",        icon: "⏱" },
+  { key: "cache",       label: "Checking cache",          icon: "📦" },
+  { key: "download",    label: "Downloading reel",        icon: "⬇️" },
+  { key: "transcribe",  label: "Transcribing audio",      icon: "🎙" },
+  { key: "frames",      label: "Extracting frames",       icon: "🖼" },
+  { key: "analyze",     label: "Analyzing content",       icon: "🧠" },
+  { key: "link",        label: "Finding promised link",   icon: "🔗" },
+  { key: "roadmap",     label: "Writing guide",           icon: "📝" },
 ];
 
 interface LoadingStateProps {
@@ -16,61 +18,82 @@ interface LoadingStateProps {
 }
 
 export default function LoadingState({ currentStage }: LoadingStateProps) {
-  const currentIndex = STAGES.findIndex((s) => s.key === currentStage);
+  const currentIndex  = STAGES.findIndex((s) => s.key === currentStage);
   const effectiveIndex = currentIndex === -1 ? 0 : currentIndex;
   const progressPercent = Math.round(((effectiveIndex + 1) / STAGES.length) * 100);
 
   return (
-    <div className="w-full max-w-sm mx-auto space-y-8">
-      <div className="flex justify-center">
-        <svg width="64" height="64" viewBox="0 0 64 64" className="text-[#4A90D9]">
-          <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-10" />
-          <circle
-            cx="32" cy="32" r="28"
-            fill="none" stroke="currentColor" strokeWidth="2"
-            strokeDasharray={`${(progressPercent / 100) * 176} 176`}
-            strokeLinecap="round"
-            className="transition-all duration-700"
-            transform="rotate(-90 32 32)"
-          />
-          <circle cx="32" cy="32" r="4" fill="currentColor" className="opacity-30" />
-          <circle cx="32" cy="14" r="3" fill="currentColor" className="spinner" />
-        </svg>
-      </div>
+    <div className="w-full max-w-sm mx-auto space-y-6">
 
+      {/* Header */}
       <div className="text-center space-y-1">
-        <p className="text-sm text-[#a1a1aa]">
-          {STAGES[effectiveIndex]?.label ?? "Processing"}...
+        <p className="text-base font-semibold text-[var(--text-primary)]">
+          {STAGES[effectiveIndex]?.label ?? "Processing"}…
         </p>
-        <p className="text-xs text-[#52525b]">{progressPercent}%</p>
+        <p className="text-xs text-[var(--text-muted)]">Hang tight, this takes a few seconds</p>
       </div>
 
-      <div className="space-y-1.5">
+      {/* Overall progress bar */}
+      <ProgressBar value={progressPercent} showLabel variant="brand" />
+
+      {/* Stage list */}
+      <div className="space-y-2">
         {STAGES.map((stage, i) => {
           const isCompleted = i < effectiveIndex;
-          const isCurrent = i === effectiveIndex;
-          const isPending = i > effectiveIndex;
+          const isCurrent   = i === effectiveIndex;
+          const isPending   = i > effectiveIndex;
+
           return (
             <div
               key={stage.key}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300 ${
-                isCurrent ? "bg-white/[0.04]" : ""
-              } ${isPending ? "opacity-30" : ""}`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] border transition-all duration-300 ${
+                isCurrent
+                  ? "bg-[var(--brand-dim)] border-[var(--brand-border)]"
+                  : isCompleted
+                  ? "bg-white border-[var(--border-default)]"
+                  : "bg-[var(--bg-elevated)] border-transparent opacity-40"
+              }`}
             >
-              <div className="w-4 h-4 flex items-center justify-center shrink-0">
+              {/* Status indicator */}
+              <div className="w-5 h-5 flex items-center justify-center shrink-0">
                 {isCompleted && (
-                  <svg className="w-3.5 h-3.5 text-[#22c55e]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center"
+                    style={{ background: "var(--brand-gradient)" }}
+                  >
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
                 )}
                 {isCurrent && (
-                  <div className="w-3 h-3 rounded-full border-2 border-[#4A90D9] border-t-transparent spinner" />
+                  <div
+                    className="w-4 h-4 rounded-full border-2 border-t-transparent spinner"
+                    style={{ borderColor: "var(--brand-solid)", borderTopColor: "transparent" }}
+                  />
                 )}
-                {isPending && <div className="w-1.5 h-1.5 rounded-full bg-[#3f3f46]" />}
+                {isPending && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--border-active)]" />
+                )}
               </div>
-              <span className={`text-xs ${isCurrent ? "text-[#f4f4f5] font-medium" : "text-[#71717a]"}`}>
+
+              <span
+                className={`text-xs flex-1 ${
+                  isCurrent
+                    ? "text-[var(--brand-solid)] font-semibold"
+                    : isCompleted
+                    ? "text-[var(--text-secondary)]"
+                    : "text-[var(--text-muted)]"
+                }`}
+              >
                 {stage.label}
               </span>
+
+              {isCurrent && (
+                <span className="text-[10px] font-semibold text-[var(--brand-solid)] bg-[var(--brand-dim)] px-2 py-0.5 rounded-[var(--radius-pill)]">
+                  {progressPercent}%
+                </span>
+              )}
             </div>
           );
         })}

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { ProgressEvent } from "@/lib/api";
+import Card from "@/components/ui/Card";
+import PrimaryButton from "@/components/ui/PrimaryButton";
 
 interface CapsuleShareProps {
   result: ProgressEvent;
@@ -35,14 +37,12 @@ const LLM_TARGETS = [
 ];
 
 export default function CapsuleShare({ result, capsuleId }: CapsuleShareProps) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]         = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const topic = result.concept?.topic || "this reel";
-  const transcript = result.roadmap
-    ? result.roadmap.slice(0, 1500)
-    : "";
-  const linkUrl = result.promised_link?.url || "";
+  const topic      = result.concept?.topic || "this reel";
+  const transcript = result.roadmap ? result.roadmap.slice(0, 1500) : "";
+  const linkUrl    = result.promised_link?.url || "";
 
   const capsulePrompt = `I decoded an Instagram reel about "${topic}". Here is the complete analysis:
 
@@ -63,55 +63,68 @@ I want to discuss this further and dive deeper into this topic. Can you help me 
   };
 
   return (
-    <div className="rounded-xl bg-white/[0.03] border border-white/[0.08] p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <svg className="w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-        </svg>
-        <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-[#52525b]">
-          Share to AI
-        </span>
-      </div>
-
-      <p className="text-xs text-[#71717a] leading-relaxed">
-        Discuss this decoded reel with any AI assistant.
-      </p>
-
-      <div className="grid grid-cols-2 gap-2">
-        {LLM_TARGETS.map((target) => (
-          <a
-            key={target.id}
-            href={target.url(capsulePrompt)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-center py-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-[#a1a1aa] hover:text-[#f4f4f5] transition-colors"
+    <Card variant="default" padding="md">
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-[var(--radius-pill)] flex items-center justify-center"
+            style={{ background: "var(--brand-gradient)" }}
           >
-            {target.name}
-          </a>
-        ))}
-      </div>
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+          </div>
+          <span className="text-xs font-semibold text-[var(--text-secondary)]">
+            Share to AI
+          </span>
+        </div>
 
-      <button
-        onClick={handleCopy}
-        className="w-full text-xs py-2 rounded-lg border border-dashed border-white/[0.08] hover:bg-white/[0.04] text-[#71717a] hover:text-[#a1a1aa] transition-colors"
-      >
-        {copied ? "Copied!" : "Copy context as prompt"}
-      </button>
+        <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+          Discuss this decoded reel with any AI assistant.
+        </p>
 
-      {capsuleId && (
-        <button
-          onClick={async () => {
-            const origin = window.location.origin;
-            const url = `${origin}/capsule/${capsuleId}`;
-            await navigator.clipboard.writeText(url);
-            setLinkCopied(true);
-            setTimeout(() => setLinkCopied(false), 2000);
-          }}
-          className="w-full text-xs py-2 rounded-lg border border-white/[0.06] hover:bg-white/[0.04] text-[#52525b] hover:text-[#71717a] transition-colors"
+        {/* LLM buttons grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {LLM_TARGETS.map((target) => (
+            <a
+              key={target.id}
+              href={target.url(capsulePrompt)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-center py-2 px-3 rounded-[var(--radius-md)] border border-[var(--brand-border)] text-[var(--brand-solid)] hover:bg-[var(--brand-dim)] transition-colors font-medium"
+            >
+              {target.name}
+            </a>
+          ))}
+        </div>
+
+        {/* Copy prompt */}
+        <PrimaryButton
+          onClick={handleCopy}
+          variant="ghost"
+          size="sm"
+          className="w-full justify-center text-xs"
         >
-          {linkCopied ? "Link copied!" : "Copy shareable link"}
-        </button>
-      )}
-    </div>
+          {copied ? "✓ Copied!" : "Copy context as prompt"}
+        </PrimaryButton>
+
+        {/* Shareable link */}
+        {capsuleId && (
+          <button
+            onClick={async () => {
+              const origin = window.location.origin;
+              const url    = `${origin}/capsule/${capsuleId}`;
+              await navigator.clipboard.writeText(url);
+              setLinkCopied(true);
+              setTimeout(() => setLinkCopied(false), 2000);
+            }}
+            className="w-full text-xs py-2 rounded-[var(--radius-md)] border border-[var(--border-default)] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+          >
+            {linkCopied ? "✓ Link copied!" : "Copy shareable link"}
+          </button>
+        )}
+      </div>
+    </Card>
   );
 }
