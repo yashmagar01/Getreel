@@ -350,16 +350,32 @@ DDG_USER_AGENTS = [
 ]
 
 
-def _safe_ddg_search(query: str, max_results: int = 5) -> list[dict]:
+def _safe_ddg_search(query: str, max_results: int = 5, budget: float = 8.0) -> list[dict]:
     """
-    Search using Serper (if API key is present) or DuckDuckGo as fallback.
+    Multi-engine search with a HARD time budget.
+
+    Order (fastest / most rate-limit tolerant first, exactly one attempt each):
+      1. Serper API         — if SERPER_API_KEY is set (paid, reliable)
+      2. DDG Instant Answer — official JSON API, far more rate-limit tolerant
+      3. DDG HTML scrape    — duckduckgo_search, last resort only
+
+    The old implementation scraped DDG HTML first with 3 retries and up to 24s
+    of backoff sleeps — which blew the 15s layer timeout on every single query
+    and returned nothing. This version always returns within `budget` seconds.
     """
+    start = time.time()
+    remaining = lambda: budget - (time.time() - start)
+
+    def _deadline(timeout: float) -> float:
+        return max(0.5, min(timeout, remaining()))
+
+    # ── 1. Serper (if configured) ─────────────────────────────────────────
     serper_key = os.getenv("SERPER_API_KEY")
     if serper_key:
         logger.info(f"[SERPER] Searching: {query[:80]!r}")
         try:
             import httpx
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=_deadline(8.0)) as client:
                 resp = client.post(
                     "https://google.serper.dev/search",
                     headers={"X-API-KEY": serper_key, "Content-Type": "application/json"},
@@ -371,67 +387,28 @@ def _safe_ddg_search(query: str, max_results: int = 5) -> list[dict]:
                     {"href": r.get("link", ""), "title": r.get("title", ""), "body": r.get("snippet", "")}
                     for r in data.get("organic", [])
                 ]
-                logger.info(f"[SERPER] Got {len(results)} results")
-                return results
+                if results:
+                    logger.info(f"[SERPER] Got {len(results)} results")
+                    return results
             else:
                 logger.warning(f"[SERPER] API returned status {resp.status_code}")
         except Exception as e:
             logger.error(f"[SERPER] Error: {e}. Falling back to DDG.")
-    else:
-        logger.info("[DDG] SERPER_API_KEY not found. Using DuckDuckGo")
 
-    # DuckDuckGo Fallback logic
-    try:
-        from duckduckgo_search import DDGS
-        from duckduckgo_search.exceptions import DuckDuckGoSearchException
-    except ImportError:
-        logger.warning("[DDG] duckduckgo-search not installed")
-        return []
-
-    logger.info(f"[DDG] Searching: {query[:80]!r}")
-
-    for attempt in range(3):
-        if attempt > 0:
-            wait = random.uniform(3.0, 8.0) * attempt
-            logger.info(f"[DDG] Rate limited — waiting {wait:.1f}s (attempt {attempt+1}/3)")
-            time.sleep(wait)
-
+    # ── 2. DDG Instant Answer API (official JSON endpoint, tolerant) ──────
+    if remaining() > 1.5:
+        logger.info(f"[DDG-IA] Searching: {query[:80]!r}")
         try:
-            ua = random.choice(DDG_USER_AGENTS)
-            with DDGS(headers={"User-Agent": ua}) as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
-                if results:
-                    logger.info(f"[DDG] Got {len(results)} results on attempt {attempt+1}")
-                    return results
-                else:
-                    logger.info(f"[DDG] Empty results on attempt {attempt+1}")
-        except DuckDuckGoSearchException as e:
-            err = str(e)
-            if "Ratelimit" in err or "202" in err or "429" in err:
-                logger.warning(f"[DDG] Rate limited (attempt {attempt+1}): {err[:80]}")
-            else:
-                logger.error(f"[DDG] Search exception (attempt {attempt+1}): {err[:120]}")
-                break  # Non-rate-limit error, don't retry
-        except Exception as e:
-            logger.error(f"[DDG] Unexpected error (attempt {attempt+1}): {e}")
-            break
-
-    # All attempts exhausted — try DDG Instant Answer API as fallback
-    logger.info(f"[DDG] HTML scraping failed — trying Instant Answer API")
-    try:
-        import httpx
-        with httpx.Client(timeout=8.0) as client:
-            resp = client.get(
-                "https://api.duckduckgo.com/",
-                params={
-                    "q": query,
-                    "format": "json",
-                    "no_html": "1",
-                    "skip_disambig": "1",
-                    "t": "ReelDecoder",
-                },
-                headers={"User-Agent": random.choice(DDG_USER_AGENTS)},
-            )
+            import httpx
+            with httpx.Client(timeout=_deadline(5.0)) as client:
+                resp = client.get(
+                    "https://api.duckduckgo.com/",
+                    params={
+                        "q": query, "format": "json", "no_html": "1",
+                        "skip_disambig": "1", "t": "ReelDecoder",
+                    },
+                    headers={"User-Agent": random.choice(DDG_USER_AGENTS)},
+                )
             data = resp.json()
             results = []
             if data.get("AbstractURL"):
@@ -448,12 +425,30 @@ def _safe_ddg_search(query: str, max_results: int = 5) -> list[dict]:
                         "body": "",
                     })
             if results:
-                logger.info(f"[DDG Instant] Got {len(results)} results")
+                logger.info(f"[DDG-IA] Got {len(results)} results")
                 return results
-    except Exception as e:
-        logger.warning(f"[DDG Instant] Fallback failed: {e}")
+        except Exception as e:
+            logger.warning(f"[DDG-IA] Failed: {e}")
 
-    logger.warning(f"[DDG] All attempts and fallback exhausted for: {query[:60]!r}")
+    # ── 3. DDG HTML scrape — ONE attempt only, never sleeps ───────────────
+    if remaining() > 1.5:
+        logger.info(f"[DDG-HTML] Searching: {query[:80]!r}")
+        try:
+            from duckduckgo_search import DDGS
+            from duckduckgo_search.exceptions import DuckDuckGoSearchException
+            ua = random.choice(DDG_USER_AGENTS)
+            with DDGS(headers={"User-Agent": ua}, timeout=_deadline(6.0)) as ddgs:
+                results = list(ddgs.text(query, max_results=max_results))
+                if results:
+                    logger.info(f"[DDG-HTML] Got {len(results)} results")
+                    return results
+                logger.info("[DDG-HTML] Empty results")
+        except DuckDuckGoSearchException as e:
+            logger.warning(f"[DDG-HTML] Rate limited/blocked: {str(e)[:80]}")
+        except Exception as e:
+            logger.warning(f"[DDG-HTML] Error: {e}")
+
+    logger.warning(f"[SEARCH] Exhausted {query[:60]!r} within {budget}s budget")
     return []
 
 
@@ -771,9 +766,11 @@ def _check_transcript(transcript: str, caption: str = "") -> dict | None:
         logger.info("[L2] Transcript too short — skipping")
         return None
 
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        logger.warning("[L2] GROQ_API_KEY not set — skipping transcript LLM")
+    from providers import build_chain, complete_with_fallback
+
+    chain = build_chain()
+    if not chain:
+        logger.warning("[L2] No AI providers configured — skipping transcript LLM")
         return None
 
     caption_text = (caption or "")[:400]
@@ -817,18 +814,10 @@ Caption: {caption_text if caption_text else 'none'}
 Transcript: {transcript_text}"""
 
     try:
-        from groq import Groq
-        client = Groq(api_key=api_key)
-
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=400,
-            temperature=0,
+        raw = complete_with_fallback(
+            chain, "", prompt,
+            max_tokens=400, temperature=0,
         )
-
-        raw = response.choices[0].message.content.strip()
-        # Strip markdown fences if present
         if raw.startswith("```"):
             raw = "\n".join(l for l in raw.split("\n") if not l.strip().startswith("```")).strip()
 
@@ -937,6 +926,52 @@ def _layer_3a_info_dict_bio(info: dict) -> dict | None:
 # Module-level Instaloader instance (reused across requests)
 _instaloader_instance = None
 
+# Maximum polite pre-query wait Instaloader is allowed to do.
+# The default controller can sleep up to 30 minutes (1800s 'iphone' sliding
+# window) inside handle_429()/wait_before_query() after a rate limit — a
+# production-blocker: asyncio.wait_for lets the resolver fall through to
+# Tier C, but the sleeping thread keeps holding the shared instance and
+# leaks one 30-minute thread per request.
+MAX_INSTALOADER_POLITE_WAIT = 10.0
+
+try:
+    import instaloader as _instaloader_mod
+except ImportError:  # pragma: no cover — Tier B is optional
+    _instaloader_mod = None
+
+
+if _instaloader_mod is not None:
+
+    class _FailFastRateController(_instaloader_mod.RateController):
+        """Rate controller that never blocks the pipeline thread.
+
+        Subclassing (not duck-typing) matters: base `wait_before_query` and
+        `handle_429` both call `self.sleep()` — with a subclass, that
+        dispatches to the override below, so every sleep path is covered:
+          - sleep()       → only allow short polite waits (<= 10s); anything
+                            larger raises instead of blocking.
+          - handle_429()  → raise TooManyRequestsException immediately
+                            (silent, no timestamp dump, no 30-min sleep).
+
+        The bio layer already catches TooManyRequestsException by name and
+        falls through to Tier C (yt-dlp profile) in milliseconds.
+        """
+
+        def sleep(self, secs: float):
+            if secs > MAX_INSTALOADER_POLITE_WAIT:
+                raise _instaloader_mod.exceptions.TooManyRequestsException(
+                    f"Instaloader rate limit: would sleep {secs:.0f}s — failing "
+                    f"fast so the resolver can fall through to Tier C"
+                )
+            time.sleep(secs)
+
+        def handle_429(self, query_type: str):
+            # Silent fail-fast: no waittime computation, no sleep, no stderr dump.
+            raise _instaloader_mod.exceptions.TooManyRequestsException(
+                f"Instagram 429 Too Many Requests (query type: {query_type})"
+            )
+
+
 def _get_instaloader():
     """Lazily create and return the shared Instaloader instance."""
     global _instaloader_instance
@@ -956,7 +991,8 @@ def _get_instaloader():
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/122.0.0.0 Safari/537.36"
-                )
+                ),
+                rate_controller=lambda ctx: _FailFastRateController(ctx),
             )
             cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
             if cookies_path and os.path.exists(cookies_path):
@@ -1347,7 +1383,10 @@ async def find_promised_link(
 
     logger.info(f"[RESOLVER] Starting 3-tier resolution for '{uploader_name}' @{handle}")
 
-    # ── Layer 0: DM Bot Interception ──────────────────────────────────────────
+    # ── Layer 0: DM Bot Interception (env-gated, OFF by default) ─────────────
+    # The Playwright DM bot opens a VISIBLE Chrome window, posts a comment, and
+    # polls the inbox for up to ~30-60s. It must never run implicitly — enable
+    # with REELDECODER_ENABLE_DM_BOT=1 and even then it is hard-capped by timeout.
     shortcode = ""
     if "webpage_url" in info:
         # Extract shortcode if possible
@@ -1355,15 +1394,26 @@ async def find_promised_link(
         if sc_match:
             shortcode = sc_match.group(1)
 
-    layer0_result = await intercept_via_dm(
-        reel_url=info.get("webpage_url", ""),
-        reel_shortcode=shortcode,
-        creator_username=handle
-    )
-    if layer0_result:
-        logger.info(f"[RESOLVER] Layer 0 SUCCESS: Found link via DM bot → {layer0_result['url']}")
-        layer0_result["winner_layer"] = "dm_bot"
-        return layer0_result
+    if os.getenv("REELDECODER_ENABLE_DM_BOT", "").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            layer0_result = await asyncio.wait_for(
+                intercept_via_dm(
+                    reel_url=info.get("webpage_url", ""),
+                    reel_shortcode=shortcode,
+                    creator_username=handle
+                ),
+                timeout=45.0,
+            )
+            if layer0_result:
+                logger.info(f"[RESOLVER] Layer 0 SUCCESS: Found link via DM bot → {layer0_result['url']}")
+                layer0_result["winner_layer"] = "dm_bot"
+                return layer0_result
+        except asyncio.TimeoutError:
+            logger.warning("[RESOLVER] Layer 0 DM bot TIMEOUT after 45s — falling through to Tier 1")
+        except Exception as e:
+            logger.error(f"[RESOLVER] Layer 0 DM bot EXCEPTION: {e} — falling through to Tier 1")
+    else:
+        logger.info("[RESOLVER] Layer 0 DM bot disabled (REELDECODER_ENABLE_DM_BOT not set) — skipping")
 
     # ── TIER 1: Instant layers ──────────────────────────────────────────────
     tier1_layers = [
