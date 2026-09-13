@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import React from "react";
 import Card from "@/components/ui/Card";
 
@@ -214,7 +213,7 @@ function parseResources(text: string): { label: string; url?: string }[] {
     .filter((r) => r.label);
 }
 
-// ── Section card wrapper ───────────────────────────────────────────────────────
+// ── Section card wrapper (Premium dashboard style) ────────────────────────────
 function SectionCard({ title, accentColor, children, delay }: {
   title: string;
   accentColor?: string;
@@ -223,14 +222,14 @@ function SectionCard({ title, accentColor, children, delay }: {
 }) {
   return (
     <div className="fade-up" style={{ animationDelay: delay }}>
-      <Card variant="default" padding="md">
-        <div className="space-y-3">
+      <Card variant="default" padding="none" className="bg-white shadow-[0_8px_24px_rgba(15,23,42,.05)] rounded-[18px] p-6 border border-[var(--border-default)]">
+        <div className="space-y-4">
           <div className="flex items-center gap-2.5">
             <div
-              className="w-1 h-4 rounded-[var(--radius-pill)] shrink-0"
-              style={{ background: accentColor || "var(--brand-gradient)" }}
+              className="w-1 h-5 rounded-full shrink-0"
+              style={{ background: accentColor || "linear-gradient(to right, #FF8A73, #FF5D8F)" }}
             />
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">{title}</h3>
+            <h3 className="text-sm font-extrabold tracking-wide text-[var(--text-primary)]">{title}</h3>
           </div>
           {children}
         </div>
@@ -279,8 +278,7 @@ function NeedsSection({ content, delay }: { content: string; delay: string }) {
 
 function StepsSection({ content, delay }: { content: string; delay: string }) {
   const steps = parseSteps(content);
-  const [activeStep, setActiveStep] = useState<number | null>(null);
-  
+
   if (steps.length === 0) {
     return (
       <SectionCard title="Step-by-Step Guide" delay={delay}>
@@ -292,48 +290,37 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
   }
 
   return (
-    <SectionCard title="Step-by-Step Guide" delay={delay}>
-      <div className="space-y-1.5">
+    <div className="fade-up" style={{ animationDelay: delay }}>
+      <div className="flex items-center gap-2.5 mb-6">
+        <div
+          className="w-1 h-5 rounded-full shrink-0"
+          style={{ background: "linear-gradient(to right, #FF8A73, #FF5D8F)" }}
+        />
+        <h3 className="text-sm font-extrabold tracking-wide text-[var(--text-primary)]">Step-by-Step Guide</h3>
+      </div>
+      {/* Vertical timeline — always expanded, no accordion state */}
+      <div className="relative border-l-2 border-gray-200 ml-4 space-y-8 pb-4">
         {steps.map((step, i) => (
-          <div
-            key={i}
-            className={`rounded-[var(--radius-md)] border transition-all duration-200 cursor-pointer ${
-              activeStep === i
-                ? "bg-[var(--brand-dim)] border-[var(--brand-border)]"
-                : "bg-[var(--bg-elevated)] border-[var(--border-default)] hover:border-[var(--border-hover)]"
-            }`}
-            onClick={() => setActiveStep(activeStep === i ? null : i)}
-          >
-            <div className="flex items-center gap-3 p-3">
-              {/* Step number badge */}
-              <div
-                className="shrink-0 w-6 h-6 rounded-[var(--radius-pill)] flex items-center justify-center text-[10px] font-bold text-white"
-                style={{ background: "var(--brand-gradient)" }}
-              >
-                {i + 1}
-              </div>
-              <span className="flex-1 text-sm text-[var(--text-primary)] font-medium">
-                <RichText text={step.title} />
-              </span>
-              <svg
-                className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${activeStep === i ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
+          <div key={i} className="relative">
+            {/* Indicator sitting on the line */}
+            <div className="absolute -left-[17px] top-6 w-8 h-8 rounded-full bg-gradient-to-r from-[#FF8A73] to-[#FF5D8F] border-4 border-white shadow-[0_8px_24px_rgba(15,23,42,.05)] flex items-center justify-center text-white text-xs font-bold">
+              {i + 1}
             </div>
-            {activeStep === i && step.description && (
-              <div className="px-12 pb-3 text-xs text-[var(--text-secondary)] leading-relaxed animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <RichText text={step.description} />
-              </div>
-            )}
+            {/* Step body card */}
+            <div className="bg-white shadow-[0_8px_24px_rgba(15,23,42,.05)] rounded-[18px] p-6 ml-8 border border-[var(--border-default)]">
+              <p className="text-[15px] font-bold text-[var(--text-primary)] leading-snug mb-1.5">
+                <RichText text={step.title} />
+              </p>
+              {step.description && (
+                <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                  <RichText text={step.description} />
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -350,13 +337,15 @@ function MistakesSection({ content, delay }: { content: string; delay: string })
   }
   return (
     <SectionCard title="Common Mistakes to Avoid" delay={delay}>
-      <div className="space-y-2">
-        {items.map((item, i) => (
-          <div key={i} className="flex gap-2.5 text-sm text-[var(--text-secondary)] leading-relaxed">
-            <span className="text-[var(--accent-red)] shrink-0 mt-0.5 font-bold">✕</span>
-            <div><RichText text={item} /></div>
-          </div>
-        ))}
+      <div className="bg-[#FFE8EF] rounded-[20px] p-6">
+        <div className="space-y-3">
+          {items.map((item, i) => (
+            <div key={i} className="flex gap-2.5 text-sm text-[var(--text-secondary)] leading-relaxed">
+              <span className="text-[#FF5D8F] shrink-0 mt-0.5 font-extrabold">✕</span>
+              <div><RichText text={item} /></div>
+            </div>
+          ))}
+        </div>
       </div>
     </SectionCard>
   );
@@ -375,7 +364,7 @@ function ResourcesSection({ content, delay }: { content: string; delay: string }
   }
   return (
     <SectionCard title="Free Resources to Learn More" delay={delay}>
-      <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {resources.map((r, i) =>
           r.url ? (
             <a
@@ -383,11 +372,11 @@ function ResourcesSection({ content, delay }: { content: string; delay: string }
               href={r.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between p-2.5 rounded-[var(--radius-md)] bg-[var(--bg-elevated)] hover:bg-[var(--brand-dim)] border border-[var(--border-default)] hover:border-[var(--brand-border)] text-sm text-[var(--text-secondary)] hover:text-[var(--brand-solid)] transition-all group"
+              className="flex items-center justify-between gap-2 p-4 rounded-[14px] bg-[var(--bg-elevated)] hover:bg-white border border-transparent hover:border-[var(--brand-border)] hover:shadow-[0_8px_24px_rgba(15,23,42,.05)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all group"
             >
-              <span className="truncate">{r.label}</span>
+              <span className="truncate font-medium">{r.label}</span>
               <svg
-                className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--brand-solid)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0 ml-2"
+                className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--brand-solid)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0 ml-auto"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -397,7 +386,7 @@ function ResourcesSection({ content, delay }: { content: string; delay: string }
               </svg>
             </a>
           ) : (
-            <div key={i} className="p-2.5 text-sm text-[var(--text-muted)]">{r.label}</div>
+            <div key={i} className="p-4 text-sm text-[var(--text-muted)] bg-[var(--bg-elevated)] rounded-[14px]">{r.label}</div>
           )
         )}
       </div>

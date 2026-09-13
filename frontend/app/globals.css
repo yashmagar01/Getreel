@@ -23,10 +23,15 @@
   --text-placeholder: #C4C4C4;
 
   /* Brand */
-  --brand-gradient: linear-gradient(135deg, #FF876E 0%, #FF4785 100%);
+  --brand-gradient: linear-gradient(to right, #FF8A73, #FF5D8F);
   --brand-solid:    #FE6A78;
   --brand-dim:      rgba(254, 106, 120, 0.10);
   --brand-border:   rgba(254, 106, 120, 0.25);
+
+  /* Premium dashboard surfaces */
+  --bg-soft-coral: #FFF3F1;
+  --bg-soft-pink:  #FFE8EF;
+  --shadow-premium: 0 8px 24px rgba(15,23,42,.05);
 
   /* Info / Status accents (kept separate so CTAs stand out) */
   --accent-info:   #4A90D9;
