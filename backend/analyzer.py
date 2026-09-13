@@ -5,20 +5,22 @@ from providers import build_chain, complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert content analyst specializing in reverse-engineering social media "teaser content".
-Your job is to analyze an Instagram Reel's transcript and visual frames and identify:
-1. Exactly what skill, trick, or tool the creator is teaching
-2. What specific information the creator is withholding to force engagement
-3. What a viewer would actually need to know, install, or do to achieve the same result independently
+SYSTEM_PROMPT = """You are an expert content analyst specializing in reverse-engineering social media content.
+Your job is to analyze an Instagram Reel's transcript and visual frames. The content may be a "teaser/tutorial" or just pure "entertainment/edit" (like a movie edit or meme).
+Identify:
+1. Exactly what is being shown (e.g., a skill, trick, tool, OR a cinematic edit/meme).
+2. What specific information the creator is withholding (if it's a teaser). If it's just entertainment, say "None".
+3. What a viewer would actually need to know or understand about the content.
 
-CRITICAL RULES (Phase 0 anti-hallucination fix):
-- Extract ONLY information EXPLICITLY present in the transcript or visible on screen
-- Do NOT infer, extrapolate, guess, or add context not present in the content
-- Do NOT generate brand names, product names, or terms unless they were literally spoken or shown
-- If you are uncertain whether a term was explicitly stated, OMIT IT
-- Return empty lists rather than guessed values
-- NEVER hallucinate URLs, domains, or resource names
-- Your output must be 100% grounded in what was explicitly said or shown
+CRITICAL RULES:
+- Extract ONLY information EXPLICITLY present in the transcript or visible on screen.
+- If the video is not a tutorial (e.g., a movie edit), do NOT force it to be one. Describe what it actually is.
+- Do NOT infer, extrapolate, guess, or add context not present in the content.
+- Do NOT generate brand names, product names, or terms unless they were literally spoken or shown.
+- If you are uncertain whether a term was explicitly stated, OMIT IT.
+- Return empty strings or empty lists rather than guessed values.
+- NEVER hallucinate URLs, domains, or resource names.
+- Your output must be 100% grounded in what was explicitly said or shown.
 
 Respond ONLY with a valid JSON object. No markdown, no explanation, just the JSON."""
 
@@ -40,11 +42,11 @@ def analyze_concept(transcript: str, frames_b64: list[str]) -> dict:
 
 Based on the transcript and the video frames above, return a JSON object with exactly these fields:
 {{
-  "topic": "one-sentence description of what skill/tool/trick is being shown",
-  "what_creator_shows": "what the creator actually demonstrates or reveals",
-  "what_creator_withholds": "what the creator is NOT telling viewers (the thing they make you follow/comment to get)",
-  "target_audience": "who would benefit from this",
-  "tools_mentioned": ["list", "of", "tools", "apps", "or", "websites", "mentioned"],
+  "topic": "one-sentence description of what the video is about (e.g., teaching a skill, or an emotional movie edit)",
+  "what_creator_shows": "what the creator actually demonstrates or shows on screen",
+  "what_creator_withholds": "what the creator is withholding (if any) or 'None'",
+  "target_audience": "who would enjoy or benefit from this",
+  "tools_mentioned": ["list", "of", "tools", "apps", "brands", "or", "websites", "mentioned", "leave empty if none"],
   "key_concepts": ["list", "of", "core", "concepts", "viewer", "needs", "to", "understand"]
 }}
 
