@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from groq import Groq
+from providers import build_chain, complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -25,36 +25,14 @@ Respond ONLY with a valid JSON object. No markdown, no explanation, just the JSO
 
 def analyze_concept(transcript: str, frames_b64: list[str]) -> dict:
     """
-    Use Groq Llama 4 Scout (multimodal) to extract what the reel is teaching and what it withholds.
-
-    Args:
-        transcript: Plain-text transcript of the reel's audio.
-        frames_b64: List of base64-encoded JPEG frame strings.
-
-    Returns:
-        Dict with keys: topic, what_creator_shows, what_creator_withholds,
-                        target_audience, tools_mentioned, key_concepts
+    Multi-provider concept extraction from transcript + frames.
+    Falls back across Groq → Gemini → OpenAI → Anthropic.
     """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise Exception("GROQ_API_KEY environment variable is not set.")
+    chain = build_chain()
+    if not chain:
+        raise Exception("No AI providers configured (need at least GROQ_API_KEY or GOOGLE_API_KEY).")
 
-    client = Groq(api_key=api_key)
-
-    # Build multimodal content — up to 4 frames (Groq limit), then transcript
-    content = []
-
-    for b64_str in frames_b64[:4]:
-        content.append({
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/jpeg;base64,{b64_str}"
-            }
-        })
-
-    content.append({
-        "type": "text",
-        "text": f"""Analyze this Instagram Reel. Here is the full transcript of what the creator said:
+    user_prompt = f"""Analyze this Instagram Reel. Here is the full transcript of what the creator said:
 
 <transcript>
 {transcript}
@@ -71,26 +49,48 @@ Based on the transcript and the video frames above, return a JSON object with ex
 }}
 
 Respond ONLY with valid JSON. No markdown fences, no extra text."""
-    })
 
-    logger.info("Sending to Groq Llama 4 Scout for concept extraction...")
+    logger.info(f"Analyzing concept via provider chain ({len(chain)} providers available)...")
 
-    try:
-        response = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": content},
-            ],
-            max_tokens=1000,
-            temperature=0,  # Phase 0E: temperature=0 prevents hallucination
-        )
-    except Exception as e:
-        raise Exception(f"Groq concept extraction failed: {str(e)}")
+    # Try Groq first for multimodal (it's the only one that supports image input currently)
+    groq_chain = [p for p in chain if p.name == "Groq"]
+    if groq_chain and frames_b64:
+        try:
+            from groq import Groq
+            api_key = os.getenv("GROQ_API_KEY")
+            client = Groq(api_key=api_key)
+            content = []
+            for b64_str in frames_b64[:4]:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64_str}"}
+                })
+            content.append({"type": "text", "text": user_prompt})
 
-    raw = response.choices[0].message.content.strip()
+            response = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": content},
+                ],
+                max_tokens=1000,
+                temperature=0,
+            )
+            raw = response.choices[0].message.content.strip()
+            return _parse_concept_json(raw)
+        except Exception as e:
+            logger.warning(f"Groq multimodal failed: {e}. Falling back to text-only chains.")
 
-    # Strip markdown code fences if present
+    # Fallback: text-only via any provider
+    raw = complete_with_fallback(
+        chain, SYSTEM_PROMPT, user_prompt,
+        max_tokens=1000, temperature=0,
+    )
+
+    return _parse_concept_json(raw)
+
+
+def _parse_concept_json(raw: str) -> dict:
     if raw.startswith("```"):
         lines = raw.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
@@ -99,18 +99,15 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
     try:
         concept = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise Exception(
-            f"Groq returned malformed JSON: {str(e)}. Raw response: {raw[:300]}"
-        )
+        raise Exception(f"AI returned malformed JSON: {str(e)}. Raw: {raw[:300]}")
 
-    # Validate required keys
     required_keys = [
         "topic", "what_creator_shows", "what_creator_withholds",
         "target_audience", "tools_mentioned", "key_concepts"
     ]
     missing = [k for k in required_keys if k not in concept]
     if missing:
-        raise Exception(f"Groq response missing required fields: {missing}")
+        raise Exception(f"AI response missing required fields: {missing}")
 
     logger.info(f"Concept extracted: {concept.get('topic', 'unknown')}")
     return concept

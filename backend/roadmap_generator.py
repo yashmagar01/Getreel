@@ -1,6 +1,5 @@
-import os
 import logging
-from groq import Groq
+from providers import build_chain, complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -24,22 +23,13 @@ Format your response in clean Markdown with exactly these 5 sections."""
 
 def generate_roadmap(concept: dict) -> str:
     """
-    Use Groq Llama 3.3 70B to generate a complete how-to guide from a concept analysis dict.
-
-    Args:
-        concept: Dict from analyzer.py with fields: topic, what_creator_shows,
-                 what_creator_withholds, target_audience, tools_mentioned, key_concepts
-
-    Returns:
-        Complete roadmap as a Markdown string.
+    Multi-provider roadmap generation.
+    Falls back across Groq → Gemini → OpenAI → Anthropic.
     """
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise Exception("GROQ_API_KEY environment variable is not set.")
+    chain = build_chain()
+    if not chain:
+        raise Exception("No AI providers configured (need at least GROQ_API_KEY or GOOGLE_API_KEY).")
 
-    client = Groq(api_key=api_key)
-
-    # Extract each field clearly so Groq can't miss the withheld information
     topic = concept.get("topic") or concept.get("skill_taught", "Unknown topic")
     shows = concept.get("what_creator_shows") or concept.get("trick_or_tool", "")
     withheld = concept.get("what_creator_withholds") or concept.get("withheld_information", "Not specified")
@@ -86,25 +76,15 @@ prompts/techniques were identified, include them by name and reconstruct their c
 ## Free Resources to Learn More
 (Specific docs, channels, or resources relevant to the exact tools and concepts mentioned)"""
 
-    logger.info("Sending to Groq Llama 3.3 70B for roadmap generation...")
+    logger.info(f"Generating roadmap via provider chain ({len(chain)} providers available)...")
 
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=2000,
-            temperature=0.4,
-        )
-    except Exception as e:
-        raise Exception(f"Groq Llama roadmap generation failed: {str(e)}")
-
-    roadmap = response.choices[0].message.content.strip()
+    roadmap = complete_with_fallback(
+        chain, SYSTEM_PROMPT, user_prompt,
+        max_tokens=2000, temperature=0.4,
+    )
 
     if not roadmap:
-        raise Exception("Groq returned an empty roadmap response.")
+        raise Exception("AI returned an empty roadmap response.")
 
     logger.info(f"Roadmap generated. Length: {len(roadmap)} chars")
     return roadmap
