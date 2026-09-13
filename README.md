@@ -172,6 +172,8 @@ section further down / `backend/.env.example`.
 
 MIT — see `LICENSE`.
 
+---
+
 <p align="center">
   Built by <a href="https://github.com/yashmagar01">Yash Magar</a> · No follows. No comments. No waiting.
 </p>
