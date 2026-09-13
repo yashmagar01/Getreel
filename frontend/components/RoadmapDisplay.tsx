@@ -109,8 +109,13 @@ function parseSections(markdown: string): ParsedSection[] {
 function parseBullets(text: string): string[] {
   return text
     .split("\n")
-    .filter((l) => l.trim().startsWith("*") || l.trim().startsWith("-"))
-    .map((l) => l.replace(/^[\s]*[\*\-]\s+/, "").trim())
+    .filter((l) => {
+      const trimmed = l.trim();
+      // Ignore horizontal rules like --- or ***
+      if (/^[\*\-]{3,}$/.test(trimmed)) return false;
+      return trimmed.startsWith("*") || trimmed.startsWith("-");
+    })
+    .map((l) => l.replace(/^[\s]*[\*\-]\s*/, "").trim())
     .filter(Boolean);
 }
 
@@ -119,6 +124,9 @@ function parseSteps(text: string): { title: string; description: string }[] {
   const steps: { title: string; description: string }[] = [];
   let current: { title: string; description: string } | null = null;
   for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^[\*\-]{3,}$/.test(trimmed)) continue; // ignore horizontal rules
+
     const matchHeader = line.match(/^###\s+(?:Step\s*\d*[:\-]?\s*)?(.*)/i);
     const matchBold  = line.match(/^\d+\.\s+\*\*(.+?)\*\*[:\-]?\s*(.*)/);
     const matchPlain = line.match(/^(\d+)\.\s+(.*)/);
@@ -172,10 +180,15 @@ function parseSteps(text: string): { title: string; description: string }[] {
 function parseResources(text: string): { label: string; url?: string }[] {
   return text
     .split("\n")
-    .filter((l) => l.trim().startsWith("*") || l.trim().startsWith("-"))
+    .filter((l) => {
+      const trimmed = l.trim();
+      // Ignore horizontal rules like --- or ***
+      if (/^[\*\-]{3,}$/.test(trimmed)) return false;
+      return trimmed.startsWith("*") || trimmed.startsWith("-");
+    })
     .map((line) => {
       // Strip only the leading bullet markup, not formatting asterisks
-      const clean = line.replace(/^[\s]*[\*\-]\s+/, "").trim();
+      const clean = line.replace(/^[\s]*[\*\-]\s*/, "").trim();
       let label = "";
       let url = "";
       
@@ -303,7 +316,7 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
         {steps.map((step, i) => (
           <div key={i} className="relative">
             {/* Indicator sitting on the line */}
-            <div className="absolute -left-[17px] top-6 w-8 h-8 rounded-full bg-gradient-to-r from-[#FF8A73] to-[#FF5D8F] border-4 border-white shadow-[0_8px_24px_rgba(15,23,42,.05)] flex items-center justify-center text-white text-xs font-bold">
+                        <div className="absolute -left-[17px] top-4 w-8 h-8 rounded-full bg-gradient-to-r from-[#FF8A73] to-[#FF5D8F] border-4 border-white shadow-[0_8px_24px_rgba(15,23,42,.05)] flex items-center justify-center text-white text-xs font-bold">
               {i + 1}
             </div>
             {/* Step body card */}
