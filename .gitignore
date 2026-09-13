@@ -50,6 +50,6 @@ desktop.ini
 *.swo
 
 # ── Cookies / Auth ───────────────────────────────────────────────────────────
-cookies.txt
-*.cookies
+# cookies.txt
+# *.cookies
 ig_session.json
