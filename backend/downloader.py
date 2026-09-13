@@ -2,6 +2,7 @@ import os
 import logging
 import ffmpeg
 import yt_dlp
+from ig_meta import writable_cookie_copy
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,14 @@ def download_reel(url: str, temp_dir: str) -> dict:
         },
     }
 
-    if cookies_path and os.path.exists(cookies_path):
-        ydl_opts["cookiefile"] = cookies_path
-        logger.info("Using Instagram cookies for download")
+    # Stage the secret cookie file into our writable temp_dir first.
+    # yt-dlp writes merged cookies back into `cookiefile` on exit, so handing
+    # it a read-only Render Secret File (/etc/secrets/...) raises
+    # OSError [Errno 30] AFTER a successful download, killing the pipeline.
+    staged_cookies = writable_cookie_copy(cookies_path, temp_dir)
+    if staged_cookies:
+        ydl_opts["cookiefile"] = staged_cookies
+        logger.info("Using Instagram cookies for download (staged writable copy)")
     else:
         logger.warning("No cookies file found — download may fail")
 
