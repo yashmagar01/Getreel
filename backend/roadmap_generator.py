@@ -58,7 +58,7 @@ Use exactly these 5 sections:
 (One focused paragraph — be specific about the exact technique, not a generic description)
 
 ## What You'll Need
-(Only tools directly relevant to THIS topic — no generic dev tools unless mentioned)
+(A strictly bulleted list of tools or resources directly relevant to this exact topic. NO tables, NO paragraphs.)
 
 ## Step-by-Step Guide
 (Numbered steps that directly reconstruct what was withheld. If specific named
@@ -72,9 +72,11 @@ prompts/techniques were identified, include them by name and reconstruct their c
 
     logger.info(f"Generating roadmap via provider chain ({len(chain)} providers available)...")
 
+    # Use the more reliable big model for markdown generation if available
     roadmap = complete_with_fallback(
         chain, SYSTEM_PROMPT, user_prompt,
-        max_tokens=2000, temperature=0.4,
+        model="openai/gpt-oss-120b",
+        max_tokens=2500, temperature=0.3,
     )
 
     if not roadmap:
