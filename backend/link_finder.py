@@ -818,8 +818,18 @@ Transcript: {transcript_text}"""
             chain, "", prompt,
             max_tokens=400, temperature=0,
         )
-        if raw.startswith("```"):
-            raw = "\n".join(l for l in raw.split("\n") if not l.strip().startswith("```")).strip()
+        # Strip markdown fences if present
+        if "```" in raw:
+            import re
+            m = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
+            if m:
+                raw = m.group(1).strip()
+                
+        # Handle prepended text before JSON brace
+        start_idx = raw.find("{")
+        end_idx = raw.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            raw = raw[start_idx:end_idx+1]
 
         data = json.loads(raw)
         logger.info(f"[L2] LLM extraction result: {data}")
@@ -1080,7 +1090,9 @@ def _layer_3c_ytdlp_profile(handle: str) -> dict | None:
     logger.info(f"[L3C] Fetching @{handle} profile via yt-dlp: {profile_url}")
 
     try:
+        import tempfile
         import yt_dlp
+        from ig_meta import writable_cookie_copy
         cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
         ydl_opts = {
             "quiet": True,
@@ -1088,8 +1100,13 @@ def _layer_3c_ytdlp_profile(handle: str) -> dict | None:
             "extract_flat": True,
         }
         if cookies_path and os.path.exists(cookies_path):
-            ydl_opts["cookiefile"] = cookies_path
-            logger.info(f"[L3C] Using cookies from {cookies_path}")
+            # Stage a writable copy: yt-dlp saves merged cookies back into
+            # `cookiefile` on exit, which crashes on read-only secret mounts
+            # (OSError Errno 30). See downloader.py.
+            staged = writable_cookie_copy(cookies_path, tempfile.gettempdir())
+            if staged:
+                ydl_opts["cookiefile"] = staged
+                logger.info(f"[L3C] Using cookies from {cookies_path} (staged copy)")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             profile_info = ydl.extract_info(profile_url, download=False)
