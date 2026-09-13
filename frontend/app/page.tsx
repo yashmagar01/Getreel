@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import LinkInputCard from "@/components/LinkInputCard";
 import LoadingState from "@/components/LoadingState";
+import ReelPreviewCard from "@/components/ReelPreviewCard";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
 import PromisedLinkCTA from "@/components/PromisedLinkCTA";
 import { DownloadButton } from "@/components/DownloadButton";
@@ -10,7 +11,7 @@ import CapsuleShare from "@/components/CapsuleShare";
 import PlatformIconGrid from "@/components/ui/PlatformIconGrid";
 import Onboarding from "@/components/Onboarding";
 import BottomNav from "@/components/BottomNav";
-import { analyzeReel, type ProgressEvent } from "@/lib/api";
+import { analyzeReel, type ProgressEvent, type ReelMeta } from "@/lib/api";
 
 type Result = ProgressEvent;
 type Platform = "instagram" | "youtube" | null;
@@ -18,6 +19,7 @@ type Platform = "instagram" | "youtube" | null;
 export default function Home() {
   const [isLoading, setIsLoading]       = useState(false);
   const [currentStage, setCurrentStage] = useState<string>("");
+  const [meta, setMeta]                 = useState<ReelMeta | null>(null);
   const [result, setResult]             = useState<Result | null>(null);
   const [downloadToken, setDownloadToken] = useState<string | null>(null);
   const [error, setError]               = useState<string | null>(null);
@@ -26,13 +28,16 @@ export default function Home() {
   const handleAnalyze = async (url: string) => {
     setIsLoading(true);
     setResult(null);
+    setMeta(null);
     setDownloadToken(null);
     setError(null);
     setCurrentStage("rate_limit");
 
     try {
       const res = await analyzeReel(url, (event) => {
-        if (event.type === "progress" && event.stage) {
+        if (event.type === "meta" && event.meta) {
+          setMeta(event.meta);
+        } else if (event.type === "progress" && event.stage) {
           setCurrentStage(event.stage);
         }
       });
@@ -47,6 +52,7 @@ export default function Home() {
 
   const handleReset = useCallback(() => {
     setResult(null);
+    setMeta(null);
     setDownloadToken(null);
     setError(null);
     setCurrentStage("");
@@ -114,8 +120,12 @@ export default function Home() {
 
         {/* ── VIEW: Loading ──────────────────────────────────────────────── */}
         {isLoading && (
-          <div className="min-h-screen flex items-center justify-center px-6">
-            <LoadingState currentStage={currentStage} />
+          <div className="min-h-screen flex items-center justify-center px-6 py-12">
+            {meta ? (
+              <ReelPreviewCard meta={meta} currentStage={currentStage} />
+            ) : (
+              <LoadingState currentStage={currentStage} />
+            )}
           </div>
         )}
 
@@ -144,51 +154,70 @@ export default function Home() {
               </div>
             </header>
 
-            <div className="max-w-5xl mx-auto px-6 py-12 space-y-10">
-
-              {/* Topic */}
-              <section className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-5 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                  <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Topic</p>
-                </div>
-                <h2 className="text-2xl md:text-4xl font-bold leading-tight text-balance text-[var(--text-primary)]">
-                  {result.concept?.topic || "What this reel is actually teaching"}
-                </h2>
-                {result.concept?.target_audience && (
-                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Audience</span>
-                    <span className="w-1 h-1 rounded-full bg-[var(--border-active)]" />
-                    <span>{result.concept.target_audience}</span>
-                  </div>
-                )}
-              </section>
-
-              {/* Cards grid */}
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
-                <div className="min-h-[180px]">
-                  {result.promised_link ? (
-                    <PromisedLinkCTA link={result.promised_link} />
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center gap-3 p-8 rounded-[var(--radius-lg)] bg-white border border-[var(--border-default)] shadow-[var(--shadow-sm)] text-center">
-                      <div className="w-10 h-10 rounded-[var(--radius-pill)] bg-[var(--bg-hover)] flex items-center justify-center">
-                        <svg className="w-5 h-5 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-[var(--text-primary)]">No link found</p>
-                        <p className="text-xs text-[var(--text-muted)] mt-0.5">No specific link was mentioned in this reel.</p>
-                      </div>
+            <div className="max-w-6xl mx-auto px-6 py-12">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-10 items-start">
+                
+                {/* ── LEFT COLUMN (Main Content) ── */}
+                <div className="space-y-12 min-w-0">
+                  
+                  {/* Topic */}
+                  <section className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-6 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                      <p className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Topic</p>
                     </div>
+                    <h2 className="text-3xl md:text-5xl font-extrabold leading-[1.15] text-balance text-[var(--text-primary)]">
+                      {result.concept?.topic || "What this reel is actually teaching"}
+                    </h2>
+                    {result.concept?.target_audience && (
+                      <div className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)] mt-2">
+                        <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold border border-[var(--border-default)] px-2 py-0.5 rounded-[var(--radius-pill)] bg-white">Audience</span>
+                        <span>{result.concept.target_audience}</span>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Promised Link */}
+                  <section>
+                    {result.promised_link ? (
+                      <PromisedLinkCTA link={result.promised_link} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-3 p-8 rounded-[var(--radius-lg)] bg-[var(--bg-elevated)] border border-[var(--border-default)] shadow-sm text-center">
+                        <div className="w-12 h-12 rounded-full bg-[var(--bg-hover)] flex items-center justify-center">
+                          <svg className="w-6 h-6 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold text-[var(--text-primary)]">No link found</p>
+                          <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm mx-auto">No specific link was mentioned in this reel.</p>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Roadmap */}
+                  {result.roadmap && (
+                    <section className="space-y-6 pt-8 border-t border-[var(--border-default)]">
+                      <div className="flex items-center gap-4">
+                        <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Roadmap</h3>
+                        <div className="h-px flex-1 bg-[var(--border-default)]" />
+                      </div>
+                      <RoadmapDisplay
+                        roadmap={result.roadmap}
+                        fromCache={result.from_cache || false}
+                        skipFirst={true}
+                      />
+                    </section>
                   )}
                 </div>
 
-                <div className="space-y-3">
+                {/* ── RIGHT COLUMN (Sidebar) ── */}
+                <div className="space-y-6 lg:sticky lg:top-24 mt-8 lg:mt-0">
                   {downloadToken && (
                     <div className="fade-up" style={{ animationDelay: "100ms" }}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
                         <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Download</p>
                       </div>
                       <DownloadButton token={downloadToken} />
@@ -197,31 +226,16 @@ export default function Home() {
 
                   {result.roadmap && (
                     <div className="fade-up" style={{ animationDelay: "200ms" }}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
                         <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Share</p>
                       </div>
                       <CapsuleShare result={result} capsuleId={result.capsule_id} />
                     </div>
                   )}
                 </div>
+                
               </div>
-
-              {/* Roadmap */}
-              {result.roadmap && (
-                <section className="space-y-6 pt-4 border-t border-[var(--border-default)]">
-                  <div className="flex items-center gap-4">
-                    <div className="h-px flex-1 bg-[var(--border-default)]" />
-                    <h3 className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Roadmap</h3>
-                    <div className="h-px flex-1 bg-[var(--border-default)]" />
-                  </div>
-                  <RoadmapDisplay
-                    roadmap={result.roadmap}
-                    fromCache={result.from_cache || false}
-                    skipFirst={true}
-                  />
-                </section>
-              )}
             </div>
           </div>
         )}
