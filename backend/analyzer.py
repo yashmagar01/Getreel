@@ -70,12 +70,12 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
             content.append({"type": "text", "text": user_prompt})
 
             response = client.chat.completions.create(
-                model="llama-3.2-90b-vision-preview",
+                model="qwen/qwen3.6-27b",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": content},
                 ],
-                max_tokens=1000,
+                max_tokens=800,
                 temperature=0,
             )
             raw = response.choices[0].message.content.strip()
@@ -93,11 +93,22 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
 
 
 def _parse_concept_json(raw: str) -> dict:
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
-        raw = "\n".join(lines).strip()
+    raw = raw.strip()
+    
+    # Strip markdown fences if present anywhere
+    if "```" in raw:
+        # Try to find exactly what's inside the first ```json ... ``` or just ``` ... ``` block
+        import re
+        match = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
+        if match:
+            raw = match.group(1).strip()
 
+    # Sometimes LLMs put text before the opening brace
+    start_idx = raw.find("{")
+    end_idx = raw.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        raw = raw[start_idx:end_idx+1]
+        
     try:
         concept = json.loads(raw)
     except json.JSONDecodeError as e:
