@@ -44,7 +44,17 @@ export default function CapsuleShare({ result, capsuleId }: CapsuleShareProps) {
   const transcript = result.roadmap ? result.roadmap.slice(0, 1500) : "";
   const linkUrl    = result.promised_link?.url || "";
 
-  const capsulePrompt = `I decoded an Instagram reel about "${topic}". Here is the complete analysis:
+  const isFailed = topic.toLowerCase().includes("could not extract") || topic === "Unknown" || topic === "this reel";
+
+  const capsulePrompt = isFailed
+    ? `I tried to decode an Instagram reel, but the tool couldn't extract enough information. Here is the response I got:
+
+Analysis:
+${transcript}
+${linkUrl ? `\nThe creator also linked to: ${linkUrl}` : ""}
+
+Can you help me figure out what this reel might have been about, or what details I should look for to understand it better?`
+    : `I decoded an Instagram reel about "${topic}". Here is the complete analysis:
 
 Topic: ${result.concept?.topic || "Unknown"}
 ${result.concept?.target_audience ? `Target Audience: ${result.concept.target_audience}` : ""}
