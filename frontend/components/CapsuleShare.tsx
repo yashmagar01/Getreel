@@ -26,8 +26,7 @@ const LLM_TARGETS = [
   {
     id: "gemini",
     name: "Gemini",
-    url: (prompt: string) =>
-      `https://gemini.google.com/?q=${encodeURIComponent(prompt.slice(0, 4000))}`,
+    url: (prompt: string) => `https://gemini.google.com/?q=${encodeURIComponent(prompt.slice(0, 4000))}`,
   },
   {
     id: "deepseek",
@@ -95,7 +94,7 @@ I want to discuss this further and dive deeper into this topic. Can you help me 
         </p>
 
         {/* LLM buttons grid */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 pb-1">
           {LLM_TARGETS.map((target) => (
             <a
               key={target.id}
