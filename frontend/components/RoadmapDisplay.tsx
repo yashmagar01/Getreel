@@ -82,17 +82,27 @@ const SECTION_TITLES = [
 ];
 
 function parseSections(markdown: string): ParsedSection[] {
+  const rawSections = markdown.split(/(?:^|\n)##\s+/).filter(Boolean);
   const sections: ParsedSection[] = [];
-  for (let i = 0; i < SECTION_TITLES.length; i++) {
-    const title     = SECTION_TITLES[i];
-    const nextTitle = SECTION_TITLES[i + 1];
-    const startMarker = `## ${title}`;
-    const startIdx    = markdown.indexOf(startMarker);
-    if (startIdx === -1) continue;
-    const contentStart = startIdx + startMarker.length;
-    const endIdx       = nextTitle ? markdown.indexOf(`## ${nextTitle}`) : markdown.length;
-    const content      = markdown.slice(contentStart, endIdx === -1 ? markdown.length : endIdx).trim();
-    sections.push({ title, content });
+  
+  for (const section of rawSections) {
+     if (!section.trim() || section.toLowerCase().startsWith("roadmap")) continue;
+     const lines = section.split('\n');
+     const rawTitle = lines[0].trim();
+     const content = lines.slice(1).join('\n').trim();
+     
+     if (!content) continue;
+     
+     const titleLower = rawTitle.toLowerCase().replace(/[^a-z]/g, '');
+     let mappedTitle = rawTitle;
+     
+     if (titleLower.includes('teaching')) mappedTitle = "What This Reel Is Actually Teaching";
+     else if (titleLower.includes('need')) mappedTitle = "What You'll Need";
+     else if (titleLower.includes('step')) mappedTitle = "Step-by-Step Guide";
+     else if (titleLower.includes('mistake')) mappedTitle = "Common Mistakes to Avoid";
+     else if (titleLower.includes('resource') || titleLower.includes('free')) mappedTitle = "Free Resources to Learn More";
+
+     sections.push({ title: mappedTitle, content });
   }
   return sections;
 }
@@ -101,7 +111,7 @@ function parseBullets(text: string): string[] {
   return text
     .split("\n")
     .filter((l) => l.trim().startsWith("*") || l.trim().startsWith("-"))
-    .map((l) => l.replace(/^[\s*\-]+/, "").trim())
+    .map((l) => l.replace(/^[\s]*[\*\-]\s+/, "").trim())
     .filter(Boolean);
 }
 
@@ -165,10 +175,41 @@ function parseResources(text: string): { label: string; url?: string }[] {
     .split("\n")
     .filter((l) => l.trim().startsWith("*") || l.trim().startsWith("-"))
     .map((line) => {
-      const clean = line.replace(/^[\s*\-]+/, "").trim();
-      const linkMatch = clean.match(/\[(.+?)\]\((https?:\/\/.+?)\)/);
-      if (linkMatch) return { label: linkMatch[1], url: linkMatch[2] };
-      return { label: clean };
+      // Strip only the leading bullet markup, not formatting asterisks
+      const clean = line.replace(/^[\s]*[\*\-]\s+/, "").trim();
+      let label = "";
+      let url = "";
+      
+      const linkMatch = clean.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
+      if (linkMatch) {
+         const matchedLabel = linkMatch[1];
+         url = linkMatch[2];
+         
+         // Extract any descriptive text placed before the link
+         const remainder = clean.replace(linkMatch[0], "").replace(/\*\*/g, "").replace(/[:\-]+\s*$/, "").trim();
+         
+         if (matchedLabel.startsWith("http") && remainder.length > 3) {
+             label = remainder;
+         } else {
+             label = matchedLabel.replace(/\*\*/g, "");
+             if (remainder && !matchedLabel.startsWith("http")) {
+                 label = remainder + " " + label;
+             }
+         }
+      } else {
+          const bareUrlMatch = clean.match(/(https?:\/\/[^\s\*]+)/);
+          if (bareUrlMatch) {
+              url = bareUrlMatch[1];
+              label = clean.replace(url, "").replace(/\*\*/g, "").replace(/[:\-]+\s*$/, "").trim();
+              if (!label) label = url;
+          } else {
+              label = clean.replace(/\*\*/g, "").trim();
+          }
+      }
+      
+      // Final cleanup of stray syntax
+      label = label.replace(/\*/g, "").replace(/^[\:\-]\s*/, "").replace(/[\:\-]\s*$/, "").trim();
+      return url ? { label, url } : { label };
     })
     .filter((r) => r.label);
 }
@@ -211,6 +252,15 @@ function TeachingSection({ content, delay }: { content: string; delay: string })
 
 function NeedsSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
+  if (items.length === 0) {
+    return (
+      <SectionCard title="What You'll Need" delay={delay}>
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed overflow-x-auto">
+          <RichText text={content} />
+        </div>
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard title="What You'll Need" delay={delay}>
       <div className="flex flex-wrap gap-2">
@@ -230,6 +280,17 @@ function NeedsSection({ content, delay }: { content: string; delay: string }) {
 function StepsSection({ content, delay }: { content: string; delay: string }) {
   const steps = parseSteps(content);
   const [activeStep, setActiveStep] = useState<number | null>(null);
+  
+  if (steps.length === 0) {
+    return (
+      <SectionCard title="Step-by-Step Guide" delay={delay}>
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <RichText text={content} />
+        </div>
+      </SectionCard>
+    );
+  }
+
   return (
     <SectionCard title="Step-by-Step Guide" delay={delay}>
       <div className="space-y-1.5">
@@ -278,6 +339,15 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
 
 function MistakesSection({ content, delay }: { content: string; delay: string }) {
   const items = parseBullets(content);
+  if (items.length === 0) {
+    return (
+      <SectionCard title="Common Mistakes to Avoid" delay={delay}>
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <RichText text={content} />
+        </div>
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard title="Common Mistakes to Avoid" delay={delay}>
       <div className="space-y-2">
@@ -294,6 +364,15 @@ function MistakesSection({ content, delay }: { content: string; delay: string })
 
 function ResourcesSection({ content, delay }: { content: string; delay: string }) {
   const resources = parseResources(content);
+  if (resources.length === 0) {
+    return (
+      <SectionCard title="Free Resources to Learn More" delay={delay}>
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <RichText text={content} />
+        </div>
+      </SectionCard>
+    );
+  }
   return (
     <SectionCard title="Free Resources to Learn More" delay={delay}>
       <div className="space-y-1.5">
