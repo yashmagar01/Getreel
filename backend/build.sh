@@ -24,4 +24,12 @@ fi
 chmod +x bin/ffmpeg
 chmod +x bin/ffprobe
 
-echo "FFmpeg installation completed successfully."
+if [ ! -f "bin/deno" ]; then
+  echo "Downloading deno for yt-dlp..."
+  curl -L https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o deno.zip
+  python -m zipfile -e deno.zip bin/
+  rm deno.zip
+fi
+chmod +x bin/deno
+
+echo "FFmpeg and Deno installation completed successfully."

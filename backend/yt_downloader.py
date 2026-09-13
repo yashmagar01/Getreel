@@ -4,6 +4,7 @@ import re
 import tempfile
 import asyncio
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,9 @@ async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, 
     # Attach cookies only when they contain YouTube/Google entries
     cookiefile = _get_cookiefile()
     if cookiefile:
-        ydl_opts["cookiefile"] = cookiefile
+        temp_cookiefile = os.path.join(work_dir, "temp_cookies.txt")
+        shutil.copy2(cookiefile, temp_cookiefile)
+        ydl_opts["cookiefile"] = temp_cookiefile
     else:
         logger.info("YouTube: no YouTube cookies in cookies.txt — using default client (no auth)")
 
