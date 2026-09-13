@@ -5,6 +5,7 @@ import tempfile
 import asyncio
 import logging
 import shutil
+from yt_dlp.networking.impersonate import ImpersonateTarget
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,8 @@ async def _do_download(url: str, quality: str, work_dir: str, use_cookies: bool)
         "noplaylist":      True,
         "writethumbnail":  True,
         "postprocessors":  postprocessors,
+        # Impersonate a real Chrome browser to bypass Datacenter TLS fingerprinting
+        "impersonate":     ImpersonateTarget.from_str("chrome"),
         # Download the EJS challenge solver from GitHub automatically.
         "remote_components": ["ejs:github"],
         "http_headers": {
