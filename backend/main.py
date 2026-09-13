@@ -28,6 +28,7 @@ from cache import get_cached_result, save_result
 from rate_limiter import check_rate_limit
 from link_finder import find_promised_link
 from dm_interceptor import init_ig_client
+from ig_meta import fetch_ig_meta, enrich_info_with_meta
 from job_store import (
     create_job, get_queue, delete_queue,
     register_download, get_download_path, delete_download_token,
@@ -55,8 +56,9 @@ class YTDownloadRequest(BaseModel):
 
 
 # ── URL Validation ────────────────────────────────────────────────────────────
+# Accepts both /reel/ and /p/ URLs (oEmbed pre-flight supports both).
 INSTAGRAM_REEL_PATTERN = re.compile(
-    r"https://(www\.)?instagram\.com/reel/[A-Za-z0-9_-]+/?(\?.*)?\S*$"
+    r"https://(www\.)?instagram\.com/(reel|p)/[A-Za-z0-9_-]+/?(\?.*)?\S*$"
 )
 
 
@@ -108,6 +110,32 @@ class AnalyzeRequest(BaseModel):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Instant Metadata Pre-flight (oEmbed) ──────────────────────────────────────
+@app.post("/reel-info")
+async def reel_info(request: AnalyzeRequest):
+    """
+    Zero-cost instant metadata pre-flight via Instagram's public oEmbed API.
+    Returns the full caption, author handle, and thumbnail in ~1s —
+    no download, no Whisper, no LLM.
+    """
+    url = str(request.instagram_url).strip()
+
+    if not INSTAGRAM_REEL_PATTERN.match(url):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
+        )
+
+    try:
+        meta = await fetch_ig_meta(url)
+        return meta
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"/reel-info pre-flight failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not fetch reel metadata: {e}")
 
 
 # ── SSE Progress Endpoint ─────────────────────────────────────────────────────
@@ -189,7 +217,7 @@ async def analyze(request: AnalyzeRequest, req: Request):
     if not INSTAGRAM_REEL_PATTERN.match(url):
         raise HTTPException(
             status_code=400,
-            detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/..."
+            detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
         )
 
     client_ip = req.client.host if req.client else "unknown"
@@ -225,11 +253,24 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 return
 
             await push("download", "Downloading the reel from Instagram...")
+            # ── Step 0: Instant oEmbed pre-flight (Bug 0D + caption fix) ──
+            # Best-effort: on any failure the pipeline proceeds on the yt-dlp path.
+            ig_meta: dict | None = None
+            try:
+                ig_meta = await fetch_ig_meta(url)
+                await queue.put({"type": "meta", "meta": ig_meta})
+            except Exception as e:
+                logger.warning(f"oEmbed pre-flight failed, continuing with yt-dlp path: {e}")
+                ig_meta = None
+
             temp_dir = tempfile.mkdtemp()
             download_result = download_reel(url, temp_dir)
             video_path = download_result["video_path"]
             audio_path = download_result["audio_path"]
             info       = download_result["info"]
+            # Enrich yt-dlp info with oEmbed metadata: fixes numeric
+            # uploader_id (Bug 0D) and truncated descriptions.
+            info = enrich_info_with_meta(info, ig_meta)
             comments   = info.get("comments") or []
             description = info.get("description") or ""
 
