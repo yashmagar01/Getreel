@@ -31,7 +31,7 @@ class GroqProvider(LLMProvider):
         from groq import Groq
         client = Groq(api_key=self.api_key)
         response = client.chat.completions.create(
-            model=model or "llama-3.3-70b-versatile",
+            model=model or "llama3-70b-8192",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -60,7 +60,7 @@ class GeminiProvider(LLMProvider):
             for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
                       "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
         ]
-        model_id = model or "models/gemini-2.0-flash"
+        model_id = model or "models/gemini-3.6-flash"
         gen_model = genai.GenerativeModel(
             model_id,
             system_instruction=system_prompt,

@@ -68,7 +68,7 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
             content.append({"type": "text", "text": user_prompt})
 
             response = client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                model="llama-3.2-90b-vision-preview",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": content},
