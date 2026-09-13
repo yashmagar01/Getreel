@@ -9,6 +9,7 @@ const STAGES = [
   { key: "transcribe",  label: "Transcribing audio",      icon: "🎙" },
   { key: "frames",      label: "Extracting frames",       icon: "🖼" },
   { key: "analyze",     label: "Analyzing content",       icon: "🧠" },
+  { key: "classify",    label: "Identifying content type", icon: "🔍" },
   { key: "link",        label: "Finding promised link",   icon: "🔗" },
   { key: "roadmap",     label: "Writing guide",           icon: "📝" },
 ];

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
 import PromisedLinkCTA from "@/components/PromisedLinkCTA";
+import type { ContentBlock } from "@/lib/api";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -14,6 +15,8 @@ interface CapsuleData {
   concept_summary: any;
   roadmap_markdown: string;
   promised_link: any;
+  content_type?: string;
+  blocks?: ContentBlock[];
 }
 
 export default function CapsuleClient() {
@@ -76,7 +79,7 @@ export default function CapsuleClient() {
           </h2>
           <div className="h-px flex-1 bg-white/[0.04]" />
         </div>
-        <RoadmapDisplay roadmap={capsule.roadmap_markdown} />
+        <RoadmapDisplay roadmap={capsule.roadmap_markdown} blocks={capsule.blocks} />
       </section>
 
       <footer className="text-center pt-8 border-t border-white/[0.04]">

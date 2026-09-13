@@ -5,8 +5,30 @@ import tempfile
 import asyncio
 import logging
 import shutil
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# ── SSRF guard (defense in depth — the Pydantic model in main.py is the
+# primary gate; this protects any direct internal callers of this module) ──
+_YT_ALLOWED_HOSTS = frozenset({"youtube.com", "youtu.be", "m.youtube.com"})
+
+
+def assert_youtube_url(url: str) -> str:
+    """Raise ValueError unless url is an http(s) URL on a YouTube host."""
+    clean = (url or "").strip()
+    try:
+        parsed = urlparse(clean)
+    except Exception:
+        raise ValueError("Invalid URL.")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only YouTube domains are permitted (http/https YouTube URLs only).")
+    host = (parsed.hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host not in _YT_ALLOWED_HOSTS:
+        raise ValueError("Only YouTube domains are permitted (youtube.com, youtu.be, m.youtube.com).")
+    return clean
 
 def _impersonate_target():
     """Return ImpersonateTarget('chrome') if curl_cffi is installed, else None."""
@@ -122,6 +144,7 @@ async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, 
     Attempt 1: authenticated (cookies) — required on datacenter IPs.
     Attempt 2: cookieless mobile fallback — works on residential IPs only.
     """
+    url = assert_youtube_url(url)
     work_dir = tempfile.mkdtemp()
 
     has_cookies = _get_cookiefile() is not None

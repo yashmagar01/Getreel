@@ -2,6 +2,7 @@
 
 import React from "react";
 import Card from "@/components/ui/Card";
+import type { ContentBlock } from "@/lib/api";
 
 // ── Markdown Formatter ────────────────────────────────────────────────────────
 function RichText({ text }: { text: string }) {
@@ -65,6 +66,9 @@ interface RoadmapDisplayProps {
   fromCache?: boolean;
   skipFirst?: boolean;
   singleSection?: string;
+  // Structured blocks from the backend content strategies (Phase D).
+  // When absent (legacy cache hit), falls back to `roadmap` markdown.
+  blocks?: ContentBlock[];
 }
 
 interface ParsedSection {
@@ -407,9 +411,197 @@ function ResourcesSection({ content, delay }: { content: string; delay: string }
   );
 }
 
+// ── Generic block renderers (Phase D: one renderer serves every genre) ───────
+function RecapCardBlock({ block, delay }: { block: ContentBlock; delay: string }) {
+  return (
+    <SectionCard title={block.title || "What this reel is"} delay={delay}>
+      <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+        <RichText text={block.summary || block.body || ""} />
+      </p>
+      {!!block.genre_tags?.length && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {block.genre_tags.map((tag) => (
+            <span
+              key={tag}
+              className="text-xs px-3 py-1.5 rounded-[var(--radius-pill)] bg-[var(--brand-dim)] border border-[var(--brand-border)] text-[var(--brand-solid)] font-medium"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function QuickSummaryBlock({ block, delay }: { block: ContentBlock; delay: string }) {
+  return (
+    <SectionCard title={block.title || "Summary"} delay={delay}>
+      <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+        <RichText text={block.body || ""} />
+      </p>
+    </SectionCard>
+  );
+}
+
+function ItemListBlock({ block, delay }: { block: ContentBlock; delay: string }) {
+  const items = (block.items || []).map((item) =>
+    typeof item === "string" ? { title: item, description: "" } : {
+      title: item.heading || item.name || "",
+      description: item.body || "",
+    }
+  );
+  const numbered = block.type === "scene_list";
+  if (numbered) {
+    return (
+      <div className="fade-up" style={{ animationDelay: delay }}>
+        <div className="flex items-center gap-2.5 mb-6">
+          <div
+            className="w-1 h-5 rounded-full shrink-0"
+            style={{ background: "linear-gradient(to right, #FF8A73, #FF5D8F)" }}
+          />
+          <h3 className="text-sm font-extrabold tracking-wide text-[var(--text-primary)]">{block.title}</h3>
+        </div>
+        <div className="relative border-l-2 border-gray-200 ml-4 space-y-8 pb-4">
+          {items.map((step, i) => (
+            <div key={i} className="relative">
+              <div className="absolute -left-[17px] top-4 w-8 h-8 rounded-full bg-gradient-to-r from-[#FF8A73] to-[#FF5D8F] border-4 border-white shadow-[0_8px_24px_rgba(15,23,42,.05)] flex items-center justify-center text-white text-xs font-bold">
+                {i + 1}
+              </div>
+              <div className="bg-white shadow-[0_8px_24px_rgba(15,23,42,.05)] rounded-[18px] p-6 ml-8 border border-[var(--border-default)]">
+                {step.title && (
+                  <p className="text-[15px] font-bold text-[var(--text-primary)] leading-snug mb-1.5">
+                    <RichText text={step.title} />
+                  </p>
+                )}
+                {step.description && (
+                  <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+                    <RichText text={step.description} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <SectionCard title={block.title || "Details"} delay={delay}>
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div key={i} className="text-sm text-[var(--text-secondary)] leading-relaxed">
+            {item.title && (
+              <p className="font-semibold text-[var(--text-primary)]">
+                <RichText text={item.title} />
+              </p>
+            )}
+            {item.description && <RichText text={item.description} />}
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function ComparisonTableBlock({ block, delay }: { block: ContentBlock; delay: string }) {
+  const columns = block.columns || [];
+  const rows = block.rows || [];
+  return (
+    <SectionCard title={block.title || "Comparison"} delay={delay}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              {columns.map((col) => (
+                <th key={col} className="text-left text-xs font-extrabold tracking-wide text-[var(--text-primary)] pb-2 pr-4">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className="border-t border-[var(--border-default)]">
+                {row.map((cell, j) => (
+                  <td key={j} className="py-2.5 pr-4 text-[var(--text-secondary)] leading-relaxed align-top">
+                    <RichText text={cell} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </SectionCard>
+  );
+}
+
+function ListSectionBlock({ block, delay }: { block: ContentBlock; delay: string }) {
+  const items = (block.items || []).map((item) =>
+    typeof item === "string" ? item : item.body || item.heading || item.name || ""
+  ).filter(Boolean);
+  return (
+    <SectionCard title={block.title || "Details"} delay={delay}>
+      <div className="space-y-2.5">
+        {items.map((item, i) => (
+          <div key={i} className="flex gap-2.5 text-sm text-[var(--text-secondary)] leading-relaxed">
+            <span className="text-[var(--brand-solid)] shrink-0 mt-0.5 font-extrabold">•</span>
+            <div><RichText text={item} /></div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function renderBlock(block: ContentBlock, index: number) {
+  const delay = `${index * 100}ms`;
+  switch (block.type) {
+    case "recap_card":      return <RecapCardBlock key={`${block.type}-${index}`} block={block} delay={delay} />;
+    case "quick_summary":   return <QuickSummaryBlock key={`${block.type}-${index}`} block={block} delay={delay} />;
+    case "scene_list":
+    case "technique_list":  return <ItemListBlock key={`${block.type}-${index}`} block={block} delay={delay} />;
+    case "comparison_table": return <ComparisonTableBlock key={`${block.type}-${index}`} block={block} delay={delay} />;
+    case "list_section":    return <ListSectionBlock key={`${block.type}-${index}`} block={block} delay={delay} />;
+    case "markdown_document": return null; // handled by the markdown path below
+    default: return (
+      <SectionCard key={`${block.type}-${index}`} title={block.title || "Analysis"} delay={delay}>
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <RichText text={block.body || block.summary || ""} />
+        </div>
+      </SectionCard>
+    );
+  }
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
-export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSection }: RoadmapDisplayProps) {
-  const sections = parseSections(roadmap);
+export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSection, blocks }: RoadmapDisplayProps) {
+  // Structured path: render each block with its own component. A lone
+  // markdown_document falls through to the legacy markdown renderer so
+  // teaser output is byte-identical to before (Phase B parity).
+  const structuredBlocks = (blocks || []).filter((b) => b?.type && b.type !== "markdown_document");
+  if (structuredBlocks.length > 0) {
+    return (
+      <div className="space-y-4">
+        {fromCache && (
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Cached result
+          </div>
+        )}
+        {structuredBlocks.map((b, i) => renderBlock(b, i))}
+      </div>
+    );
+  }
+
+  const effectiveRoadmap =
+    !structuredBlocks.length && (blocks || []).length > 0 && blocks![0].type === "markdown_document" && blocks![0].body
+      ? blocks![0].body!
+      : roadmap;
+  const sections = parseSections(effectiveRoadmap);
 
   const renderSection = (section: ParsedSection, index: number) => {
     const delay = `${index * 100}ms`;
@@ -440,7 +632,7 @@ export default function RoadmapDisplay({ roadmap, fromCache, skipFirst, singleSe
         : (
             <SectionCard title="Analysis" delay="0ms">
               <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                <RichText text={roadmap} />
+                <RichText text={effectiveRoadmap} />
               </div>
             </SectionCard>
           )

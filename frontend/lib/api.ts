@@ -28,6 +28,31 @@ export interface ReelMeta {
   shortcode: string;
 }
 
+export type ContentType = "teaser_tutorial" | "entertainment_commentary" | "pure_entertainment" | string;
+
+// Structured output blocks produced by the backend content strategies (Phase D).
+// Legacy payloads carry only `roadmap`; new payloads carry both.
+export interface ContentBlock {
+  type:
+    | "markdown_document"
+    | "recap_card"
+    | "quick_summary"
+    | "scene_list"
+    | "technique_list"
+    | "comparison_table"
+    | "list_section"
+    | string;
+  title?: string;
+  body?: string;
+  summary?: string;
+  genre_tags?: string[];
+  topic?: string;
+  target_audience?: string;
+  items?: Array<{ heading?: string; name?: string; body?: string } | string>;
+  columns?: string[];
+  rows?: string[][];
+}
+
 export interface ProgressEvent {
   type: "progress" | "meta" | "done" | "error";
   stage?: string;
@@ -39,6 +64,8 @@ export interface ProgressEvent {
   download_token?: string;
   from_cache?: boolean;
   capsule_id?: string;
+  content_type?: ContentType;
+  blocks?: ContentBlock[];
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;

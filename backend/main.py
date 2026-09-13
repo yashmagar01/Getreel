@@ -17,13 +17,16 @@ from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from urllib.parse import urlparse
 
 from downloader import download_reel
 from transcriber import transcribe_audio
 from frame_extractor import extract_frames
 from analyzer import analyze_concept
 from roadmap_generator import generate_roadmap
+from content_classifier import classify, normalize_content_type
+from content_strategies import get_strategy
 from cache import get_cached_result, save_result
 from rate_limiter import check_rate_limit
 from link_finder import find_promised_link
@@ -50,9 +53,56 @@ logger = logging.getLogger(__name__)
 
 
 
+YT_ALLOWED_HOSTS = frozenset({"youtube.com", "youtu.be", "m.youtube.com"})
+
+
 class YTDownloadRequest(BaseModel):
-    url: str
+    url: str = Field(..., max_length=2000)
     quality: str = "best" # e.g., '1080p', '720p', '480p', 'audio', 'best'
+
+    @field_validator("url")
+    @classmethod
+    def _validate_youtube_url(cls, v: str) -> str:
+        """Allow only YouTube watch/shorts/share URLs (SSRF guard)."""
+        url = (v or "").strip()
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            raise ValueError("Invalid URL.")
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Only YouTube domains are permitted (http/https YouTube URLs only).")
+        host = (parsed.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if host not in YT_ALLOWED_HOSTS:
+            raise ValueError("Only YouTube domains are permitted (youtube.com, youtu.be, m.youtube.com).")
+        return url
+
+
+# ── Content-strategy helpers (Phase B/C/D: additive, legacy-safe) ─────────────
+def _content_payload_from_cache(cached: dict) -> dict:
+    """Build the additive content_type/blocks payload for a cache hit.
+
+    Legacy rows (no content_type/blocks) fall back to a single
+    `markdown_document` block wrapping the stored markdown, so the new
+    generic renderer handles old and new rows identically.
+    """
+    content_type = normalize_content_type(cached.get("content_type"))
+    blocks = cached.get("blocks")
+    if isinstance(blocks, str):
+        try:
+            blocks = json.loads(blocks)
+        except Exception:
+            blocks = None
+    # Legacy row (or failed normalisation): wrap stored markdown.
+    # NOTE: get() default only applies when the key is *missing*; legacy
+    # rows may carry content_type=None explicitly, so handle that too.
+    if not blocks and cached.get("roadmap_markdown"):
+        if not cached.get("content_type"):
+            content_type = "teaser_tutorial"
+        blocks = [{"type": "markdown_document", "title": "Roadmap",
+                   "body": cached["roadmap_markdown"]}]
+    return {"content_type": content_type, "blocks": blocks or []}
 
 
 # ── URL Validation ────────────────────────────────────────────────────────────
@@ -64,6 +114,40 @@ INSTAGRAM_REEL_PATTERN = re.compile(
 
 def validate_reel_url(url: str) -> bool:
     return bool(INSTAGRAM_REEL_PATTERN.match(url.strip()))
+
+
+def _blocks_to_markdown(blocks: list) -> str:
+    """Synthesize legacy markdown from structured blocks (backward compat)."""
+    parts: list[str] = []
+    for b in blocks or []:
+        btype = b.get("type", "")
+        title = b.get("title", "")
+        if btype == "markdown_document" and b.get("body"):
+            return b["body"]
+        if btype in ("quick_summary", "recap_card"):
+            body = b.get("body") or b.get("summary") or ""
+            parts.append(f"## {title or 'Summary'}\n{body}".strip())
+        elif btype in ("scene_list", "technique_list"):
+            lines = [f"## {title or 'Breakdown'}"]
+            for item in b.get("items") or []:
+                heading = item.get("heading") or item.get("name") or ""
+                body = item.get("body") or ""
+                lines.append(f"- **{heading}**: {body}" if heading else f"- {body}")
+            parts.append("\n".join(lines))
+        elif btype == "comparison_table":
+            cols = b.get("columns") or []
+            rows = b.get("rows") or []
+            lines = [f"## {title or 'Comparison'}"]
+            if cols:
+                lines.append(" | ".join(cols))
+            for row in rows:
+                lines.append(" | ".join(str(c) for c in row))
+            parts.append("\n".join(lines))
+        elif btype == "list_section":
+            lines = [f"## {title or 'Details'}"]
+            lines += [f"- {i}" for i in (b.get("items") or [])]
+            parts.append("\n".join(lines))
+    return "\n\n".join(p for p in parts if p.strip()) or "Unable to generate roadmap. Please try again."
 
 
 # ── Startup/shutdown ──────────────────────────────────────────────────────────
@@ -242,13 +326,16 @@ async def analyze(request: AnalyzeRequest, req: Request):
             cached = get_cached_result(url)
             if cached:
                 logger.info(f"Cache hit: {url[:50]}...")
+                content_payload = _content_payload_from_cache(cached)
                 await queue.put({
                     "type": "done",
                     "roadmap": cached["roadmap_markdown"],
                     "concept": cached.get("concept_summary"),
                     "promised_link": cached.get("promised_link"),
                     "download_token": None,
-                    "from_cache": True
+                    "from_cache": True,
+                    "content_type": content_payload["content_type"],
+                    "blocks": content_payload["blocks"],
                 })
                 return
 
@@ -289,11 +376,25 @@ async def analyze(request: AnalyzeRequest, req: Request):
             await push("analyze", "Analyzing with Llama 4 Scout...")
             concept = analyze_concept(transcript, frames)
 
+            await push("classify", "Figuring out what kind of reel this is...")
+            classification = classify(concept, transcript)
+            logger.info(f"Content classified as {classification.content_type} (confidence={classification.confidence})")
+
             await push("link", "Hunting for the promised link...")
             promised_link = await find_promised_link(info, transcript, concept, comments=comments, caption=description)
 
-            await push("roadmap", "Writing your step-by-step guide...")
-            roadmap = generate_roadmap(concept)
+            await push("roadmap", "Writing your result...")
+            strategy = get_strategy(classification.content_type)
+            result = strategy.generate(concept, transcript)
+            result["content_type"] = classification.content_type
+            blocks = result.get("blocks") or []
+            # Legacy `roadmap` field: prefer the strategy's markdown; otherwise
+            # synthesize a readable markdown from blocks so old clients keep working.
+            roadmap = result.get("roadmap_markdown") or _blocks_to_markdown(blocks)
+            # Phase A/B parity guard: teaser path must behave exactly as before.
+            if classification.content_type == "teaser_tutorial" and not result.get("roadmap_markdown"):
+                roadmap = generate_roadmap(concept)
+                blocks = [{"type": "markdown_document", "title": "Roadmap", "body": roadmap}]
 
             # Guarantee non-null fields
             roadmap = roadmap or "Unable to generate roadmap. Please try again."
@@ -314,7 +415,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
             # but we define a separate variable for the registry
 
             # Cache
-            save_result(url, transcript, concept, roadmap, promised_link)
+            save_result(url, transcript, concept, roadmap, promised_link,
+                        content_type=classification.content_type, blocks=blocks)
 
             # Create shareable capsule
             capsule_data = {
@@ -324,6 +426,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 "concept_summary": concept,
                 "roadmap_markdown": roadmap,
                 "promised_link": promised_link,
+                "content_type": classification.content_type,
+                "blocks": blocks,
             }
             capsule_id = create_capsule(capsule_data)
             
@@ -335,6 +439,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 "download_token": download_token,
                 "from_cache": False,
                 "capsule_id": capsule_id,
+                "content_type": classification.content_type,
+                "blocks": blocks,
             })
 
         except Exception as e:
