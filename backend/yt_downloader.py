@@ -20,6 +20,11 @@ FORMAT_MAP = {
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _COOKIES_FILE = os.path.join(_HERE, "cookies.txt")
 
+# Explicitly ensure our bin/ directory is in PATH so yt-dlp can find deno/ffmpeg
+BIN_DIR = os.path.join(os.path.dirname(_HERE), "bin")
+if BIN_DIR not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = f"{BIN_DIR}{os.pathsep}{os.environ.get('PATH', '')}"
+
 
 def _safe_filename(title: str, max_len: int = 100) -> str:
     """Strip characters that are illegal in filenames."""
@@ -29,8 +34,6 @@ def _safe_filename(title: str, max_len: int = 100) -> str:
 def _get_cookiefile() -> str | None:
     """
     Return path to cookies.txt only if it contains YouTube/Google cookies.
-    The web client (which supports cookies) also supports the n-challenge when
-    cookies provide a valid session — this is the supported path per the yt-dlp wiki.
     """
     if not os.path.isfile(_COOKIES_FILE):
         return None
@@ -38,7 +41,6 @@ def _get_cookiefile() -> str | None:
         with open(_COOKIES_FILE, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
         if any(d in content for d in (".youtube.com", "youtube.com", ".google.com")):
-            logger.info("YouTube: using cookies.txt for auth")
             return _COOKIES_FILE
     except OSError:
         pass
@@ -48,34 +50,40 @@ def _get_cookiefile() -> str | None:
 async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, str]:
     """
     Downloads a YouTube video/audio with embedded metadata + thumbnail.
-    Returns (file_path, work_dir, video_title).
-    Caller must shutil.rmtree(work_dir) after streaming.
-    quality: 'best' | '1080p' | '720p' | '480p' | 'audio'
-
-    Client selection strategy
-    ─────────────────────────
-    We do NOT set player_client explicitly. yt-dlp's built-in defaults (as of
-    2026.8.x) already pick clients that work without a PO Token and without
-    Deno/Node. Overriding this caused "Skipping client" warnings and format
-    unavailability errors.
-
-    Cookies are passed only if cookies.txt contains YouTube/Google entries —
-    the web client (which uses cookies) handles the n-challenge internally
-    when a valid session cookie is present.
+    We implement a robust fallback mechanism here to bypass Datacenter IP bot checks.
     """
+    work_dir = tempfile.mkdtemp()
+    
+    try:
+        # Attempt 1: With cookies (best chance for 1080p, but might hit bot block on datacenter)
+        return await _do_download(url, quality, work_dir, use_cookies=True)
+    except Exception as e:
+        msg = str(e).lower()
+        if "bot" in msg or "sign in" in msg or "403" in msg or "forbidden" in msg or "unavailable" in msg:
+            logger.warning(f"YouTube bot check triggered with cookies. Falling back to cookieless mobile client... ({e})")
+            # Attempt 2: Fallback without cookies using mobile clients to bypass IP block
+            try:
+                return await _do_download(url, quality, work_dir, use_cookies=False)
+            except Exception as e2:
+                logger.error(f"Fallback download also failed: {e2}")
+                # Clean up work_dir since we are failing
+                shutil.rmtree(work_dir, ignore_errors=True)
+                raise Exception(f"YouTube rejected the download request. The video might be restricted or YouTube is blocking the server. Details: {e2}")
+        else:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            raise e
+
+
+async def _do_download(url: str, quality: str, work_dir: str, use_cookies: bool) -> tuple[str, str, str]:
     format_spec = FORMAT_MAP.get(quality, FORMAT_MAP["best"])
     is_audio = (quality == "audio")
 
-    work_dir = tempfile.mkdtemp()
     stem = "audio" if is_audio else "video"
     outtmpl = os.path.join(work_dir, f"{stem}.%(ext)s")
 
     postprocessors: list[dict] = []
     if is_audio:
-        postprocessors.append({
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "m4a",
-        })
+        postprocessors.append({"key": "FFmpegExtractAudio", "preferredcodec": "m4a"})
     postprocessors.append({"key": "FFmpegMetadata"})
     postprocessors.append({"key": "EmbedThumbnail"})
 
@@ -87,25 +95,33 @@ async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, 
         "writethumbnail":  True,
         "postprocessors":  postprocessors,
         # Download the EJS challenge solver from GitHub automatically.
-        # Requires Deno to be installed — yt-dlp uses it to solve YouTube's
-        # JS n-challenge when cookies+web client are in play.
-        # Per: https://github.com/yt-dlp/yt-dlp/wiki/EJS
         "remote_components": ["ejs:github"],
-        # Let yt-dlp choose the best client — don't override player_client
+        "http_headers": {
+            # Standard browser User-Agent to match typical cookie origins and reduce bot flags
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
     }
+    
     if not is_audio:
         ydl_opts["merge_output_format"] = "mp4"
 
-    # Attach cookies only when they contain YouTube/Google entries
-    cookiefile = _get_cookiefile()
-    if cookiefile:
-        temp_cookiefile = os.path.join(work_dir, "temp_cookies.txt")
-        shutil.copy2(cookiefile, temp_cookiefile)
-        ydl_opts["cookiefile"] = temp_cookiefile
-    else:
-        logger.info("YouTube: no YouTube cookies in cookies.txt — using default client (no auth)")
+    if use_cookies:
+        cookiefile = _get_cookiefile()
+        if cookiefile:
+            temp_cookiefile = os.path.join(work_dir, "temp_cookies.txt")
+            shutil.copy2(cookiefile, temp_cookiefile)
+            ydl_opts["cookiefile"] = temp_cookiefile
+            ydl_opts["extractor_args"] = {"youtube": ["player_client=ios,android,web"]}
+        else:
+            use_cookies = False
 
-    logger.info("YouTube download: url=%s quality=%s", url, quality)
+    if not use_cookies:
+        # Without cookies, the web client is heavily blocked on datacenter IPs. 
+        # We explicitly force ios and android clients which have different API restrictions.
+        ydl_opts["extractor_args"] = {"youtube": ["player_client=ios,android"]}
+
+    logger.info(f"YouTube download: url={url} quality={quality} cookies={use_cookies}")
 
     title = "youtube_download"
 
@@ -126,7 +142,7 @@ async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, 
     ]
 
     if not candidates:
-        all_files = [f for f in os.listdir(work_dir) if not f.endswith(".part")]
+        all_files = [f for f in os.listdir(work_dir) if not f.endswith(".part") and "temp_cookies" not in f]
         if not all_files:
             raise Exception("Download failed — no output file produced.")
         candidates = [max(all_files, key=lambda f: os.path.getsize(os.path.join(work_dir, f)))]
