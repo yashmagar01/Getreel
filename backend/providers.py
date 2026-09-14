@@ -83,36 +83,46 @@ class GeminiProvider(LLMProvider):
 
     def __init__(self):
         self.api_key = os.getenv("GOOGLE_API_KEY")
+        if not self.api_key:
+            raise ValueError("GOOGLE_API_KEY is not set.")
 
     @property
     def name(self) -> str:
         return "Gemini"
 
     def complete(self, system_prompt: str, user_prompt: str, max_tokens: int = 1000, temperature: float = 0, model: str = None) -> str:
-        import google.generativeai as genai
-        genai.configure(api_key=self.api_key)
-        safety_settings = [
-            {"category": c, "threshold": "BLOCK_NONE"}
-            for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
-                      "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
-        ]
-        # Ignore foreign (e.g. Groq) model IDs — use our own default instead.
+        from google import genai
+        from google.genai import types
+        from google.genai.errors import APIError
+
+        client = genai.Client(api_key=self.api_key)
+        
+        # Configure model identification without relying on dead strings
         model_id = model.strip() if _is_gemini_model(model) else self.DEFAULT_MODEL
-        kwargs = {}
-        if system_prompt:
-            kwargs["system_instruction"] = system_prompt
-            
-        gen_model = genai.GenerativeModel(
-            model_id,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature,
-            ),
-            safety_settings=safety_settings,
-            **kwargs
+        # New genai drops the "models/" prefix requirement commonly used in generativeai
+        if model_id.startswith("models/"):
+            model_id = model_id[7:]
+
+        config = types.GenerateContentConfig(
+            max_output_tokens=max_tokens,
+            temperature=temperature,
         )
-        response = gen_model.generate_content(user_prompt)
-        return response.text.strip()
+        if system_prompt:
+            config.system_instruction = system_prompt
+
+        try:
+            response = client.models.generate_content(
+                model=model_id,
+                contents=user_prompt,
+                config=config,
+            )
+            return response.text.strip()
+        except APIError as e:
+            # Rebrand this to map explicitly to provider Fallback intercept
+            err_msg = str(e).lower()
+            if "not_found" in err_msg or "404" in err_msg or "deprecated" in err_msg:
+                 raise ValueError("404 Not Found")
+            raise
 
 
 # ── OpenAI ──────────────────────────────────────────────────────────────────────
