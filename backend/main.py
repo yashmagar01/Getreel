@@ -153,6 +153,17 @@ def _blocks_to_markdown(blocks: list) -> str:
 # ── Startup/shutdown ──────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Verify ffmpeg at startup so a broken binary shows in deploy logs,
+    # not as a cryptic per-request "Failed to extract audio".
+    try:
+        import shutil
+        import subprocess
+        ffmpeg_path = shutil.which("ffmpeg") or os.path.join(os.getcwd(), "bin", "ffmpeg")
+        logger.info(f"ffmpeg path: {ffmpeg_path}")
+        proc = subprocess.run([ffmpeg_path, "-version"], capture_output=True, text=True, timeout=15)
+        logger.info(f"ffmpeg version: {(proc.stdout or '').splitlines()[0] if proc.stdout else 'unknown'}")
+    except Exception as e:
+        logger.error(f"ffmpeg startup check FAILED: {e}")
     # Initialize Layer 0 Instagram client (burner account)
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, init_ig_client)
@@ -304,12 +315,13 @@ async def analyze(request: AnalyzeRequest, req: Request):
             detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
         )
 
-    client_ip = req.client.host if req.client else "unknown"
-    if not check_rate_limit(client_ip):
-        raise HTTPException(
-            status_code=429,
-            detail="You've decoded 5 reels this hour. Please wait before decoding more."
-        )
+    # BETA: rate limit disabled for 5 testers — logic kept, re-enable for launch.
+    # client_ip = req.client.host if req.client else "unknown"
+    # if not check_rate_limit(client_ip):
+    #     raise HTTPException(
+    #         status_code=429,
+    #         detail="You've decoded 5 reels this hour. Please wait before decoding more."
+    #     )
 
     job_id = create_job()
     queue = get_queue(job_id)

@@ -8,13 +8,18 @@ pip install -r requirements.txt
 # Install Playwright browsers
 playwright install chromium
 
-# Download and install ffmpeg
+# Download and install ffmpeg (re-verify cached binary — a stale/corrupt
+# bin/ from a previous build is the #1 cause of "Failed to extract audio"
+# on Render with zero diagnostics).
 if [ ! -d "bin" ]; then
   mkdir -p bin
 fi
 
-if [ ! -f "bin/ffmpeg" ]; then
+ffmpeg_works() { [ -x "bin/ffmpeg" ] && ./bin/ffmpeg -version >/dev/null 2>&1; }
+
+if ! ffmpeg_works; then
   echo "Downloading ffmpeg..."
+  rm -f bin/ffmpeg bin/ffprobe
   # Use a reliable direct link to a Linux 64-bit static build
   # This build is from an official-ish source often used in CI/CD
   curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ --strip-components=2 -C bin
@@ -23,6 +28,13 @@ fi
 # Ensure binaries are executable
 chmod +x bin/ffmpeg
 chmod +x bin/ffprobe
+
+# Fail the build fast if ffmpeg is broken — instead of failing every request at runtime.
+echo "Verifying ffmpeg..."
+./bin/ffmpeg -version | head -n 2
+./bin/ffprobe -version | head -n 2
+export PATH="$PATH:$(pwd)/bin"
+python -c "import shutil; assert shutil.which('ffmpeg'), 'ffmpeg not on PATH after install'; print('ffmpeg on PATH:', shutil.which('ffmpeg'))"
 
 if [ ! -f "bin/deno" ]; then
   echo "Downloading deno for yt-dlp..."

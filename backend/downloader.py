@@ -1,10 +1,49 @@
+import glob
 import os
 import logging
+import shutil
+import subprocess
 import ffmpeg
 import yt_dlp
 from ig_meta import writable_cookie_copy
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_ffmpeg_bin() -> str:
+    """Resolve a working ffmpeg binary, checking PATH then local bin/.
+
+    On Render, build.sh drops a static build into backend/bin/ and the
+    startCommand prepends it to PATH. If that broke (stale build cache,
+    bad tarball layout), fall back to an explicit backend/bin lookup so
+    we fail with a clear message instead of FileNotFoundError.
+    """
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    # Fallback: <repo>/backend/bin/ffmpeg (Render rootDir=backend layout)
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidate = os.path.join(here, "bin", "ffmpeg")
+    if os.path.isfile(candidate):
+        return candidate
+    # Last resort: ./bin/ffmpeg relative to CWD
+    candidate2 = os.path.join(os.getcwd(), "bin", "ffmpeg")
+    if os.path.isfile(candidate2):
+        return candidate2
+    return "ffmpeg"  # let ffmpeg-python raise, we wrap with a clear message
+
+
+def _log_ffmpeg_version() -> None:
+    try:
+        bin_path = _resolve_ffmpeg_bin()
+        out = subprocess.run(
+            [bin_path, "-version"],
+            capture_output=True, text=True, timeout=15,
+        )
+        first = (out.stdout or "").splitlines()[0] if out.stdout else ""
+        logger.info(f"ffmpeg binary: {bin_path} | {first}")
+    except Exception as e:
+        logger.error(f"ffmpeg binary check failed: {e}")
 
 
 def download_reel(url: str, temp_dir: str) -> dict:
@@ -19,7 +58,10 @@ def download_reel(url: str, temp_dir: str) -> dict:
     audio_path = os.path.join(temp_dir, "audio.mp3")
 
     ydl_opts = {
-        "format": "mp4",
+        # Prefer a muxed file with audio. Old "mp4" selector could pick a
+        # video-only format → ffmpeg audio extraction then fails on Render.
+        "format": "bv*+ba/b[acodec!=none]/b/best",
+        "merge_output_format": "mp4",
         "outtmpl": os.path.join(temp_dir, "reel.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
@@ -79,20 +121,69 @@ def download_reel(url: str, temp_dir: str) -> dict:
         )
 
     if not os.path.exists(video_path):
-        raise Exception("Download appeared to succeed but video file was not created.")
+        # yt-dlp + merge may produce reel.mkv/webm if merge failed — accept any reel.*
+        candidates = sorted(glob.glob(os.path.join(temp_dir, "reel.*")))
+        # Exclude the audio file / cookie copy we may create later
+        candidates = [c for c in candidates
+                      if os.path.basename(c) not in ("audio.mp3", "ig_cookies.txt")]
+        if candidates:
+            video_path = candidates[0]
+            logger.warning(f"Expected reel.mp4 missing, using {video_path} instead")
+        else:
+            listing = os.listdir(temp_dir)
+            raise Exception(
+                "Download appeared to succeed but video file was not created. "
+                f"temp_dir contents: {listing}"
+            )
 
-    # Extract audio
+    # Log what we actually got (size + streams) — critical for Render debugging.
+    try:
+        size = os.path.getsize(video_path)
+        logger.info(f"Downloaded file: {video_path} ({size} bytes)")
+    except Exception:
+        pass
+    _log_ffmpeg_version()
+    try:
+        probe = ffmpeg.probe(video_path)
+        streams = [(s.get("codec_type"), s.get("codec_name")) for s in probe.get("streams", [])]
+        logger.info(f"Probed streams: {streams} | format={probe.get('format', {}).get('format_name')}")
+        has_audio = any(s.get("codec_type") == "audio" for s in probe.get("streams", []))
+        if not has_audio:
+            raise Exception(
+                "This reel has no audio track (music-only or silent video). "
+                "The decoder needs spoken audio to transcribe."
+            )
+    except ffmpeg.Error as e:
+        stderr = (e.stderr or b"").decode("utf-8", errors="replace") if isinstance(e.stderr, bytes) else str(e.stderr or "")
+        logger.error(f"ffprobe failed for {video_path}: {stderr[:2000]}")
+        raise Exception(f"Downloaded video could not be read (ffprobe failed): {stderr[:500]}")
+    except Exception:
+        raise  # re-raise the clear no-audio message above unchanged
+
+    # Extract audio — capture stderr so Render logs show the REAL reason.
     try:
         (
             ffmpeg
             .input(video_path)
             .output(audio_path, format="mp3", acodec="libmp3lame", ac=1, ar="16000")
             .overwrite_output()
-            .run(quiet=True)
+            .run(capture_stdout=True, capture_stderr=True)
         )
         logger.info(f"Audio extracted: {audio_path}")
     except ffmpeg.Error as e:
-        raise Exception(f"Failed to extract audio: {e}")
+        raw = e.stderr
+        if isinstance(raw, bytes):
+            stderr = raw.decode("utf-8", errors="replace")
+        else:
+            stderr = str(raw or "")
+        logger.error(f"ffmpeg audio extraction failed: {stderr[:3000]}")
+        raise Exception(f"Failed to extract audio: {stderr[:500] or e}")
+    except FileNotFoundError as e:
+        logger.error(f"ffmpeg binary not found on PATH: {e}")
+        raise Exception(
+            "ffmpeg is not installed on the server (binary missing from PATH/bin). "
+            "Check Render build logs for the ffmpeg download step."
+        )
 
     return {
         "video_path": video_path,
