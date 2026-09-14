@@ -75,7 +75,7 @@ prompts/techniques were identified, include them by name and reconstruct their c
     # Use the more reliable big model for markdown generation if available
     roadmap = complete_with_fallback(
         chain, SYSTEM_PROMPT, user_prompt,
-        model="openai/gpt-oss-120b",
+        model="qwen/qwen3.8-27b",
         max_tokens=2500, temperature=0.3,
     )
 
