@@ -29,7 +29,9 @@ function RichText({ text }: { text: string }) {
         return (
           <React.Fragment key={index}>
             {lines.map((line, lineIdx) => {
-              const parts = line.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.+?\]\(https?:\/\/.+?\))/g);
+              const isListItem = /^[\*\-]\s+/.test(line.trim());
+              const trimmedLine = isListItem ? line.trim().replace(/^[\*\-]\s+/, '') : line;
+              const parts = trimmedLine.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.+?\]\(https?:\/\/.+?\))/g);
               const lineContent = parts.map((part, i) => {
                 if (part.startsWith('**') && part.endsWith('**')) {
                   return <strong key={i} className="text-[var(--text-primary)] font-semibold">{part.slice(2, -2)}</strong>;
@@ -46,6 +48,14 @@ function RichText({ text }: { text: string }) {
                 }
                 return <span key={i}>{part}</span>;
               });
+              
+              if (isListItem) {
+                return (
+                  <div key={lineIdx} className="ml-5 relative before:content-['•'] before:absolute before:-left-3 before:text-[var(--text-muted)] my-1">
+                    {lineContent}
+                  </div>
+                );
+              }
               
               return (
                 <React.Fragment key={lineIdx}>
@@ -293,6 +303,59 @@ function NeedsSection({ content, delay }: { content: string; delay: string }) {
   );
 }
 
+function FormulaCard({ description }: { description: string }) {
+  // Check if it clearly contains a formula structure
+  const hasFormula = description.includes("FORMULA") || description.includes("**FORMULA**");
+  if (!hasFormula) {
+    return (
+      <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+        <RichText text={description} />
+      </div>
+    );
+  }
+
+  // Split out the formula parts
+  const parts = description.split(/(?:\*\*FORMULA\*\*|FORMULA|### FORMULA)/i);
+  const beforeFormula = parts[0].trim();
+  const formulaAndAfter = parts[1] || "";
+  
+  const exampleParts = formulaAndAfter.split(/(?:\*\*EXAMPLE\*\*|EXAMPLE|### EXAMPLE)/i);
+  const formulaText = exampleParts[0].trim();
+  const exampleText = exampleParts[1] ? exampleParts[1].trim() : "";
+
+  return (
+    <div className="space-y-4">
+      {beforeFormula && (
+        <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
+          <RichText text={beforeFormula} />
+        </div>
+      )}
+      
+      <div className="bg-[#FFE8EF] rounded-[16px] p-5 shadow-sm border border-[#FF8A73]/20">
+        <div className="space-y-4">
+          {formulaText && (
+            <div>
+              <p className="text-[10px] font-extrabold tracking-widest uppercase text-[#FF5D8F] mb-1.5">Formula</p>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                <RichText text={formulaText} />
+              </p>
+            </div>
+          )}
+          
+          {exampleText && (
+            <div>
+              <p className="text-[10px] font-extrabold tracking-widest uppercase text-[#FF5D8F] mb-1.5">Example</p>
+              <p className="text-sm italic text-[var(--text-secondary)]">
+                <RichText text={exampleText} />
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StepsSection({ content, delay }: { content: string; delay: string }) {
   const steps = parseSteps(content);
 
@@ -329,9 +392,7 @@ function StepsSection({ content, delay }: { content: string; delay: string }) {
                 <RichText text={step.title} />
               </p>
               {step.description && (
-                <div className="text-sm text-[var(--text-secondary)] leading-relaxed">
-                  <RichText text={step.description} />
-                </div>
+                <FormulaCard description={step.description} />
               )}
             </div>
           </div>
