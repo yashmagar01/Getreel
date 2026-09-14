@@ -257,7 +257,7 @@ def complete_with_fallback(
                 
                 # Check for standard safety refusals
                 lower_res = result.strip().lower()
-                if lower_res.startswith("i'm sorry") or lower_res.startswith("i am sorry") or "i cannot help with that" in lower_res or lower_res.startswith("i can't help"):
+                if "i’m sorry" in lower_res or "i'm sorry" in lower_res or "i am sorry" in lower_res or "i cannot help" in lower_res or "i can't help" in lower_res or "i can’t help" in lower_res:
                     raise ValueError(f"Model refused prompt (Safety/Policy restriction: {result[:50]}...).")
                     
                 lat = int((time.time() - start_t) * 1000)
