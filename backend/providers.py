@@ -150,7 +150,36 @@ class OpenAIProvider(LLMProvider):
         return response.choices[0].message.content.strip()
 
 
+
+# ── Nvidia NIM (build.nvidia.com) ────────────────────────────────────────────────
+
+class NvidiaProvider(LLMProvider):
+    def __init__(self):
+        self.api_key = os.getenv("NVIDIA_API_KEY")
+
+    @property
+    def name(self) -> str:
+        return "Nvidia"
+
+    def complete(self, system_prompt: str, user_prompt: str, max_tokens: int = 1000, temperature: float = 0, model: str = None) -> str:
+        from openai import OpenAI
+        client = OpenAI(
+            base_url="https://integrate.api.nvidia.com/v1",
+            api_key=self.api_key
+        )
+        response = client.chat.completions.create(
+            model=model or "meta/llama-3.1-70b-instruct",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content.strip()
+
 # ── Anthropic ───────────────────────────────────────────────────────────────────
+
 
 class AnthropicProvider(LLMProvider):
     def __init__(self):
@@ -191,7 +220,13 @@ def build_chain() -> list[LLMProvider]:
     if oai.api_key:
         chain.append(oai)
 
+    
+    nv = NvidiaProvider()
+    if nv.api_key:
+        chain.append(nv)
+
     anth = AnthropicProvider()
+
     if anth.api_key:
         chain.append(anth)
 

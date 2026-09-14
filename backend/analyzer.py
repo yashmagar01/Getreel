@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from providers import build_chain, complete_with_fallback
+from model_registry import TIERS
 
 logger = logging.getLogger(__name__)
 
@@ -54,38 +55,62 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
 
     logger.info(f"Analyzing concept via provider chain ({len(chain)} providers available)...")
 
-    # Try Groq first for multimodal (it's the only one that supports image input currently)
-    groq_chain = [p for p in chain if p.name == "Groq"]
-    if groq_chain and frames_b64:
-        try:
-            from groq import Groq
-            api_key = os.getenv("GROQ_API_KEY")
-            client = Groq(api_key=api_key)
-            content = []
-            for b64_str in frames_b64[:3]:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64_str}"}
-                })
-            content.append({"type": "text", "text": user_prompt})
+    
+    # Multimodal Vision Analysis 
+    vision_tier = TIERS["concept_vision"]
+    if frames_b64:
+        for provider_name, model_id in vision_tier:
+            try:
+                content = []
+                for b64_str in frames_b64[:3]:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_str}"}
+                    })
+                content.append({"type": "text", "text": user_prompt})
 
-            response = client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": content},
-                ],
-                max_tokens=800,
-                temperature=0,
-            )
-            raw = response.choices[0].message.content.strip()
-            return _parse_concept_json(raw)
-        except Exception as e:
-            logger.warning(f"Groq multimodal failed: {e}. Falling back to text-only chains.")
+                if provider_name == "Nvidia":
+                    from openai import OpenAI
+                    client = OpenAI(
+                        base_url="https://integrate.api.nvidia.com/v1",
+                        api_key=os.getenv("NVIDIA_API_KEY")
+                    )
+                    response = client.chat.completions.create(
+                        model=model_id,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": content},
+                        ],
+                        max_tokens=800,
+                        temperature=0,
+                    )
+                    raw = response.choices[0].message.content.strip()
+                    logger.info(f"Nvidia multimodal success with {model_id}")
+                    return _parse_concept_json(raw)
+                    
+                elif provider_name == "Groq":
+                    from groq import Groq
+                    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+                    response = client.chat.completions.create(
+                        model=model_id,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "user", "content": content},
+                        ],
+                        max_tokens=800,
+                        temperature=0,
+                    )
+                    raw = response.choices[0].message.content.strip()
+                    logger.info(f"Groq multimodal success with {model_id}")
+                    return _parse_concept_json(raw)
+                    
+            except Exception as e:
+                logger.warning(f"{provider_name} multimodal failed: {e}. Falling back to next vision model.")
 
     # Fallback: text-only via any provider
     raw = complete_with_fallback(
         chain, SYSTEM_PROMPT, user_prompt,
+        tier="concept_text_fallback",
         max_tokens=1000, temperature=0,
     )
 
