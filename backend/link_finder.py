@@ -816,6 +816,7 @@ Transcript: {transcript_text}"""
     try:
         raw = complete_with_fallback(
             chain, "", prompt,
+            tier="link_hints",
             max_tokens=400, temperature=0,
         )
         # Strip markdown fences if present

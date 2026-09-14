@@ -133,7 +133,7 @@ class EntertainmentCommentaryStrategy(ContentStrategy):
         logger.info(f"Generating entertainment breakdown via provider chain ({len(chain)} providers)...")
         raw = complete_with_fallback(
             chain, _COMMENTARY_SYSTEM, _commentary_user_prompt(concept, transcript),
-            model=_COMMENTARY_MODEL, max_tokens=1800, temperature=0.3,
+            tier="entertainment_commentary", max_tokens=1800, temperature=0.3,
         )
 
         data = _parse_json(raw)

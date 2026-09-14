@@ -72,10 +72,10 @@ prompts/techniques were identified, include them by name and reconstruct their c
 
     logger.info(f"Generating roadmap via provider chain ({len(chain)} providers available)...")
 
-    # Use the more reliable big model for markdown generation if available
+    # Use the more reliable big model for markdown generation if available.
     roadmap = complete_with_fallback(
         chain, SYSTEM_PROMPT, user_prompt,
-        model="qwen/qwen3.8-27b",
+        tier="roadmap",
         max_tokens=2500, temperature=0.3,
     )
 
