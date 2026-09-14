@@ -31,7 +31,7 @@ class GroqProvider(LLMProvider):
         from groq import Groq
         client = Groq(api_key=self.api_key)
         response = client.chat.completions.create(
-            model=model or "openai/gpt-oss-120b",
+            model=model or "qwen/qwen3.8-27b",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -60,15 +60,19 @@ class GeminiProvider(LLMProvider):
             for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH",
                       "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
         ]
-        model_id = model or "models/gemini-3.6-flash"
+        model_id = model or "models/gemini-1.5-flash"
+        kwargs = {}
+        if system_prompt:
+            kwargs["system_instruction"] = system_prompt
+            
         gen_model = genai.GenerativeModel(
             model_id,
-            system_instruction=system_prompt,
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=max_tokens,
                 temperature=temperature,
             ),
             safety_settings=safety_settings,
+            **kwargs
         )
         response = gen_model.generate_content(user_prompt)
         return response.text.strip()
