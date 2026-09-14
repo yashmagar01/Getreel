@@ -62,7 +62,7 @@ Respond ONLY with valid JSON. No markdown fences, no extra text."""
             api_key = os.getenv("GROQ_API_KEY")
             client = Groq(api_key=api_key)
             content = []
-            for b64_str in frames_b64[:4]:
+            for b64_str in frames_b64[:3]:
                 content.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{b64_str}"}
