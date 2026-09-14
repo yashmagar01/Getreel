@@ -168,7 +168,7 @@ class NvidiaProvider(LLMProvider):
             api_key=self.api_key
         )
         response = client.chat.completions.create(
-            model=model or "meta/llama-3.1-70b-instruct",
+            model=model or "meta/llama-3.2-90b-vision-preview",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -303,12 +303,13 @@ def complete_with_fallback(
                 lat = int((time.time() - start_t) * 1000)
                 err_str = str(e).lower()
                 
-                # 404 / Decommissioned - FATAL for this model ID
-                if "404" in err_str or "not found" in err_str or "doesn't exist" in err_str or "decommissioned" in err_str:
-                    logger.error(f"[PROVIDER] tier={tier} provider={provider_name} model={model_id} outcome=fatal_error (404/Not Found) latency_ms={lat} - skipping")
+                # 404 / 410 Gone / Decommissioned - FATAL for this model ID
+                if ("404" in err_str or "410" in err_str or "not found" in err_str or "doesn't exist" in err_str
+                        or "decommissioned" in err_str or "end of life" in err_str or "gone" in err_str):
+                    logger.error(f"[PROVIDER] tier={tier} provider={provider_name} model={model_id} outcome=fatal_error (404/410/Not Found) latency_ms={lat} - skipping")
                     errors_encountered.append(f"{provider_name} ({model_id}): {e}")
                     _circuit_breaker[cbreaker_key].append(time.time())
-                    break 
+                    break
                     
                 # 429 / Rate Limit
                 elif "429" in err_str or "too many requests" in err_str or "resourceexhausted" in err_str:
