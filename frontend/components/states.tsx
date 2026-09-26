@@ -50,7 +50,7 @@ export function Header() {
           </svg>
         </span>
         <span className="font-bold text-[17px] tracking-tight">
-          <span className="text-black">Vid</span><span style={{ color: "var(--brand-solid)" }}>Save</span>
+          <span className="text-black">Get</span><span style={{ color: "var(--brand-solid)" }}>Reel</span>
         </span>
       </div>
       <span className="w-9 h-9 rounded-full flex items-center justify-center text-[var(--text-secondary)]" aria-hidden>

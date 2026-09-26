@@ -468,7 +468,7 @@ export default function Home() {
         </AnimatePresence>
 
         <footer className="w-full py-10 mt-10 text-center border-t border-black/5">
-          <p className="text-xs text-[var(--text-muted)] tracking-wide">VidSave — No follows. No comments. No waiting.</p>
+          <p className="text-xs text-[var(--text-muted)] tracking-wide">GetReel &mdash; No follows. No comments. No waiting.</p>
         </footer>
       </div>
     </main>

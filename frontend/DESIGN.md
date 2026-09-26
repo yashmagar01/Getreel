@@ -1,6 +1,6 @@
-# VidSave Design System v2 — Single Source of Truth
+# GetReel Design System v2 — Single Source of Truth
 
-> VidSave structure + VidSave identity. This file overrides `TOKENS.md`
+> GetReel structure + GetReel identity. This file overrides `TOKENS.md`
 > (legacy) and any Figma drift. If a value isn't here, reuse the closest
 > token below — never invent one. Backend untouched.
 
@@ -39,8 +39,8 @@ Platform detection: `detectPlatform()` in `states.tsx` — `INSTAGRAM_RE` (`inst
 
 ## 3. Brand
 
-Personality: fast, intelligent, trustworthy, premium, calm. Follow VidSave Dribbble Case Study exactly. Solid white backgrounds, Dark Gray text, and Vibrant Blue. Brand gradient is reserved for CTAs,
-progress fills, active tabs — never body text or surfaces. Exact matching of VidSave case study rules.
+Personality: fast, intelligent, trustworthy, premium, calm. Follow GetReel Dribbble Case Study exactly. Solid white backgrounds, Dark Gray text, and Vibrant Blue. Brand gradient is reserved for CTAs,
+progress fills, active tabs — never body text or surfaces. Exact matching of GetReel case study rules.
 
 ## 4. Color tokens (`globals.css :root` — exact values)
 
@@ -178,7 +178,7 @@ kills all animation. Never swap components without `AnimatePresence`.
 `idle → preview → downloading → success` (both) `→ analyzing → report` (IG only).
 `AnimatePresence mode="wait"` around all; error returns to `preview`/`success`
 with message. Sticky mobile Download pill on `preview`; sticky % pill on
-`downloading`. Footer verbatim: "VidSave — No follows. No comments. No waiting."
+`downloading`. Footer verbatim: "GetReel &mdash; No follows. No comments. No waiting."
 
 ## 11. AI step mapping (UI-only; backend SSE untouched)
 
@@ -215,6 +215,6 @@ utilities; no arbitrary hex in JSX.
 
 1. Read this file + `globals.css` + `states.tsx` before touching UI.
 2. Never add deps for what Framer Motion/CSS already do.
-3. Never copy VidSave blue or add screens outside §10 flows.
+3. Never copy GetReel blue or add screens outside §10 flows.
 4. Every new UI reuses §9 components/tokens; deviations need explicit user sign-off.
 5. `// ponytail:` marks deliberate simplifications with ceiling + upgrade path.
