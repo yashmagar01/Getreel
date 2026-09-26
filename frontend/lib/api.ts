@@ -83,16 +83,17 @@ function sanitizeErrorMessage(message: string): string {
 
 export async function analyzeReel(
   instagramUrl: string,
-  onProgress: (event: ProgressEvent) => void
+  onProgress: (event: ProgressEvent) => void,
+  downloadToken?: string | null
 ): Promise<ProgressEvent> {
   if (!BACKEND_URL) {
     throw new Error("Backend URL is not configured. Set NEXT_PUBLIC_BACKEND_URL.");
   }
 
-  const response = await fetch(`${BACKEND_URL}/analyze`, {
+  const response = await fetch(`${BACKEND_URL}/api/resource`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instagram_url: instagramUrl }),
+    body: JSON.stringify({ instagram_url: instagramUrl, download_token: downloadToken ?? null }),
   });
 
   if (!response.ok) {
@@ -129,4 +130,33 @@ export async function analyzeReel(
 
 export function getDownloadUrl(token: string): string {
   return `${BACKEND_URL}/download/${token}`;
+}
+
+export interface FastDownload {
+  platform: string;
+  download_token: string;
+  title?: string | null;
+  duration?: number | null;
+  thumbnail?: string | null;
+}
+
+// Flow A: instant Instagram download — no AI, no transcription, no LLM.
+export async function downloadInstagram(instagramUrl: string): Promise<FastDownload> {
+  if (!BACKEND_URL) {
+    throw new Error("Backend URL is not configured. Set NEXT_PUBLIC_BACKEND_URL.");
+  }
+  const response = await fetch(`${BACKEND_URL}/api/instagram/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instagram_url: instagramUrl }),
+  });
+  if (!response.ok) {
+    let detail = "Download failed";
+    try {
+      const err = await response.json();
+      detail = err.detail || detail;
+    } catch {}
+    throw new Error(sanitizeErrorMessage(detail));
+  }
+  return response.json();
 }

@@ -199,6 +199,8 @@ app.add_middleware(
 # ── Request Schema ────────────────────────────────────────────────────────────
 class AnalyzeRequest(BaseModel):
     instagram_url: str
+    # ponytail: set by the fast downloader — resource mode reuses the file
+    download_token: str | None = None
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -273,27 +275,19 @@ async def stream_progress(job_id: str):
 async def download_video(token: str):
     """
     Streams the video file to the client.
-    Deletes the file and token after streaming.
-    Single-use: token is invalidated after first download.
+    File + token survive for 15 min (expiry cleanup) so a later
+    "Find Resources" call can reuse the same file — no re-download.
     """
     video_path = get_download_path(token)
     if not video_path or not os.path.exists(video_path):
         return JSONResponse({"error": "Download link expired or invalid"}, status_code=404)
 
-    delete_download_token(token)
     filename = os.path.basename(video_path)
 
-    async def file_streamer():
-        try:
-            with open(video_path, "rb") as f:
-                while chunk := f.read(1024 * 1024):  # 1MB chunks
-                    yield chunk
-        finally:
-            try:
-                os.remove(video_path)
-                logger.info(f"Download complete, cleaned up {video_path}")
-            except Exception as e:
-                logger.error(f"Cleanup after download failed: {e}")
+    def file_streamer():
+        with open(video_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):  # 1MB chunks
+                yield chunk
 
     return StreamingResponse(
         file_streamer(),
@@ -304,8 +298,42 @@ async def download_video(token: str):
     )
 
 
-# ── Main Endpoint ─────────────────────────────────────────────────────────────
+# ── Fast Instagram Download (Flow A — no AI, no Playwright, no Whisper) ──────
+@app.post("/api/instagram/download")
+async def instagram_download(request: AnalyzeRequest):
+    """
+    Downloader-first fast path: yt-dlp video only, instant token.
+    The AI pipeline never runs here — use /api/resource for that.
+    """
+    url = str(request.instagram_url).strip()
+    if not validate_reel_url(url):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
+        )
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # ponytail: blocking yt-dlp — off the loop or concurrent requests stall
+        result = await asyncio.to_thread(download_reel, url, temp_dir, False)
+        token = register_download(result["video_path"])
+        info = result.get("info") or {}
+        return JSONResponse({
+            "platform": "instagram",
+            "download_token": token,
+            "title": info.get("title"),
+            "duration": info.get("duration"),
+            "thumbnail": info.get("thumbnail"),
+        })
+    except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        logger.error(f"Fast download failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Main Endpoint (Flow B — Resource Mode, Instagram only) ───────────────────
+# ponytail: /analyze kept for backward compat; /api/resource is the new name
 @app.post("/analyze")
+@app.post("/api/resource")
 async def analyze(request: AnalyzeRequest, req: Request):
     url = str(request.instagram_url).strip()
 
@@ -363,10 +391,25 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 ig_meta = None
 
             temp_dir = tempfile.mkdtemp()
-            download_result = download_reel(url, temp_dir)
-            video_path = download_result["video_path"]
-            audio_path = download_result["audio_path"]
-            info       = download_result["info"]
+            download_result = None
+            # ponytail: reuse the fast-download file — never download twice
+            reused = get_download_path(request.download_token) if request.download_token else None
+            if reused and os.path.exists(reused):
+                logger.info(f"Resource mode reusing downloaded file: {reused}")
+                video_path = reused
+                temp_dir = os.path.dirname(reused)
+                audio_path = os.path.join(temp_dir, "audio.mp3")
+                if not os.path.exists(audio_path):
+                    import ffmpeg  # ponytail: lazy — download path never loads this
+                    (ffmpeg.input(video_path)
+                           .output(audio_path, format="mp3", acodec="libmp3lame", ac=1, ar="16000")
+                           .overwrite_output().run(capture_stdout=True, capture_stderr=True))
+                info, comments, description = {}, [], (ig_meta or {}).get("title") or ""
+            else:
+                download_result = download_reel(url, temp_dir)
+                video_path = download_result["video_path"]
+                audio_path = download_result["audio_path"]
+                info       = download_result["info"]
             # Enrich yt-dlp info with oEmbed metadata: fixes numeric
             # uploader_id (Bug 0D) and truncated descriptions.
             info = enrich_info_with_meta(info, ig_meta)

@@ -46,12 +46,14 @@ def _log_ffmpeg_version() -> None:
         logger.error(f"ffmpeg binary check failed: {e}")
 
 
-def download_reel(url: str, temp_dir: str) -> dict:
+def download_reel(url: str, temp_dir: str, extract_audio: bool = True) -> dict:
     """
-    Downloads reel video + audio.
+    Downloads reel video (+ audio unless extract_audio=False).
     Returns { video_path, audio_path, info }
     'info' is the full yt-dlp info dict — contains description,
     uploader_id, comments, duration, and all metadata.
+    Fast path (extract_audio=False, used by the instant downloader):
+    skips comment extraction and audio rendering — video only.
     """
     cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
     video_path = os.path.join(temp_dir, "reel.mp4")
@@ -65,10 +67,11 @@ def download_reel(url: str, temp_dir: str) -> dict:
         "outtmpl": os.path.join(temp_dir, "reel.%(ext)s"),
         "quiet": True,
         "no_warnings": True,
-        "getcomments": True,
+        # ponytail: fast download skips comments — resource mode still gets them
+        "getcomments": extract_audio,
         "extractor_args": {
             "instagram": {"max_comments": ["50"]},
-        },
+        } if extract_audio else {},
         "http_headers": {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -142,6 +145,10 @@ def download_reel(url: str, temp_dir: str) -> dict:
         logger.info(f"Downloaded file: {video_path} ({size} bytes)")
     except Exception:
         pass
+    if not extract_audio:
+        # ponytail: fast path — video only, no probe/audio needed for AI
+        return {"video_path": video_path, "audio_path": None,
+                "temp_dir": temp_dir, "info": info}
     _log_ffmpeg_version()
     try:
         probe = ffmpeg.probe(video_path)

@@ -28,7 +28,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:500
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface LinkInputCardProps {
-  onInstagramSubmit: (url: string) => void;
+  onInstagramDownloaded: (url: string, token: string) => void;
   isLoading: boolean;
   error?: string;
   onPlatformChange?: (platform: Platform) => void;
@@ -36,7 +36,7 @@ interface LinkInputCardProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function LinkInputCard({
-  onInstagramSubmit,
+  onInstagramDownloaded,
   isLoading,
   error: externalError = "",
   onPlatformChange,
@@ -127,7 +127,24 @@ export default function LinkInputCard({
     }
 
     if (platform === "instagram") {
-      onInstagramSubmit(trimmed);
+      // Downloader-first: instant file, AI only on explicit "Find Resources".
+      setYtLoading(true);
+      try {
+        const { downloadInstagram, getDownloadUrl } = await import("@/lib/api");
+        const res = await downloadInstagram(trimmed);
+        const dlUrl = getDownloadUrl(res.download_token);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        a.setAttribute("download", "");
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        onInstagramDownloaded(trimmed, res.download_token);
+      } catch (e: unknown) {
+        setLocalError(e instanceof Error ? e.message : "Download failed");
+      } finally {
+        setYtLoading(false);
+      }
       return;
     }
 
@@ -139,9 +156,9 @@ export default function LinkInputCard({
   const isEnabled     = mounted && !submitLoading && url.trim().length > 0;
 
   const buttonLabel =
-    submitLoading ? (platform === "youtube" ? "Downloading…" : "Decoding…")
+    submitLoading ? (platform === "youtube" ? "Downloading…" : platform === "instagram" ? "Downloading…" : "Decoding…")
     : platform === "youtube"    ? "Download"
-    : platform === "instagram"  ? "Decode"
+    : platform === "instagram"  ? "Download"
     : "Analyze";
 
   // ── Platform icon prefix ────────────────────────────────────────────────────

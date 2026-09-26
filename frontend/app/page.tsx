@@ -88,10 +88,22 @@ export default function Home() {
   const [meta, setMeta]                 = useState<ReelMeta | null>(null);
   const [result, setResult]             = useState<Result | null>(null);
   const [downloadToken, setDownloadToken] = useState<string | null>(null);
+  // Flow A state: fast download finished, AI not yet run
+  const [downloadedUrl, setDownloadedUrl]     = useState<string | null>(null);
+  const [downloadedToken, setDownloadedToken] = useState<string | null>(null);
   const [error, setError]               = useState<string | null>(null);
   const [activePlatform, setActivePlatform] = useState<Platform>(null);
 
-  const handleAnalyze = async (url: string) => {
+  // Flow A — instant download already triggered the browser save;
+  // remember the token so Flow B can reuse the server-side file.
+  const handleDownloaded = useCallback((url: string, token: string) => {
+    setDownloadedUrl(url);
+    setDownloadedToken(token);
+    setDownloadToken(token);
+    setError(null);
+  }, []);
+
+  const handleAnalyze = async (url: string, token?: string | null) => {
     setIsLoading(true);
     setResult(null);
     setMeta(null);
@@ -106,9 +118,9 @@ export default function Home() {
         } else if (event.type === "progress" && event.stage) {
           setCurrentStage(event.stage);
         }
-      });
+      }, token ?? downloadedToken);
       setResult(res);
-      setDownloadToken(res.download_token ?? null);
+      setDownloadToken(res.download_token ?? token ?? downloadedToken);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
@@ -120,6 +132,8 @@ export default function Home() {
     setResult(null);
     setMeta(null);
     setDownloadToken(null);
+    setDownloadedUrl(null);
+    setDownloadedToken(null);
     setError(null);
     setCurrentStage("");
   }, []);
@@ -137,7 +151,7 @@ export default function Home() {
             {/* Badge */}
             <div className="mb-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[var(--radius-pill)] bg-[var(--brand-dim)] border border-[var(--brand-border)] text-xs font-semibold tracking-widest uppercase text-[var(--brand-solid)]">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand-solid)] pulse-subtle" />
-              AI-Powered · Video Tools
+              Fast Downloader · Optional AI
             </div>
 
             {/* Hero */}
@@ -147,16 +161,35 @@ export default function Home() {
             </h1>
 
             <p className="text-[var(--text-secondary)] text-center text-base md:text-lg max-w-md mb-10 leading-relaxed">
-              Decode any Instagram Reel — AI extracts the roadmap, links, and resources. Or download any YouTube video in seconds.
+              Fast Instagram & YouTube downloader. Need the hidden links too? Find Resources runs the full AI breakdown — Instagram only.
             </p>
 
             {/* Unified input */}
             <LinkInputCard
-              onInstagramSubmit={handleAnalyze}
+              onInstagramDownloaded={handleDownloaded}
               isLoading={isLoading}
               error={error || ""}
               onPlatformChange={setActivePlatform}
             />
+
+            {/* Flow A done → offer Flow B (Instagram only) */}
+            {downloadedToken && downloadedUrl && (
+              <div className="w-full max-w-xl mx-auto mt-6 p-5 rounded-[var(--radius-lg)] bg-white border border-[var(--border-default)] shadow-[var(--shadow-sm)] text-center space-y-3 animate-in fade-in duration-300">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">✅ Video downloaded</p>
+                <p className="text-sm text-[var(--text-secondary)]">Need the hidden resources from this Reel?</p>
+                <div className="space-y-2">
+                  {downloadedToken && <DownloadButton token={downloadedToken} />}
+                  <button
+                    onClick={() => handleAnalyze(downloadedUrl, downloadedToken)}
+                    className="w-full text-sm font-bold px-6 py-2.5 rounded-full text-white hover:opacity-90 transition-opacity"
+                    style={{ background: "var(--brand-gradient)" }}
+                  >
+                    Find Resources
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">Hidden links · Caption analysis · AI breakdown · Comment bait detection</p>
+              </div>
+            )}
 
             {/* Platform grid */}
             <div className="mt-10 flex flex-col items-center gap-3">
