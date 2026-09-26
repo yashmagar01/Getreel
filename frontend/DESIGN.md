@@ -1,6 +1,6 @@
-# GetReel Design System v2 — Single Source of Truth
+# VidSave Design System v2 — Single Source of Truth
 
-> VidSave structure + GetReel identity. This file overrides `TOKENS.md`
+> VidSave structure + VidSave identity. This file overrides `TOKENS.md`
 > (legacy) and any Figma drift. If a value isn't here, reuse the closest
 > token below — never invent one. Backend untouched.
 
@@ -39,15 +39,14 @@ Platform detection: `detectPlatform()` in `states.tsx` — `INSTAGRAM_RE` (`inst
 
 ## 3. Brand
 
-Personality: fast, intelligent, trustworthy, premium, calm. No loud gradients,
-no heavy shadows, no over-animation. Brand gradient is reserved for CTAs,
-progress fills, active tabs — never body text or surfaces.
+Personality: fast, intelligent, trustworthy, premium, calm. Follow VidSave Dribbble Case Study exactly. Solid white backgrounds, Dark Gray text, and Vibrant Blue. Brand gradient is reserved for CTAs,
+progress fills, active tabs — never body text or surfaces. Exact matching of VidSave case study rules.
 
 ## 4. Color tokens (`globals.css :root` — exact values)
 
 ```css
---brand-gradient: linear-gradient(135deg, #FF8A65, #FF4D8D);
---brand-solid:    #FF4D8D;   /* text/icons/outline accents, focus rings */
+--brand-gradient: linear-gradient(135deg, #3B82F6, #1D4ED8);
+--brand-solid:    #2563EB;   /* text/icons/outline accents, focus rings */
 --brand-dim:      rgba(255,77,141,0.08);
 --brand-border:   rgba(255,77,141,0.28);
 
@@ -179,7 +178,7 @@ kills all animation. Never swap components without `AnimatePresence`.
 `idle → preview → downloading → success` (both) `→ analyzing → report` (IG only).
 `AnimatePresence mode="wait"` around all; error returns to `preview`/`success`
 with message. Sticky mobile Download pill on `preview`; sticky % pill on
-`downloading`. Footer verbatim: "GetReel — No follows. No comments. No waiting."
+`downloading`. Footer verbatim: "VidSave — No follows. No comments. No waiting."
 
 ## 11. AI step mapping (UI-only; backend SSE untouched)
 

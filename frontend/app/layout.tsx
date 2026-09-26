@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GetReel — Decode Reels & Download Videos Instantly",
+  title: "VidSave — Decode Reels & Download Videos Instantly",
   description:
     "Paste any Instagram Reel or YouTube URL. AI extracts the hidden roadmap, promised links, and resources — or download the video in your chosen quality. No follows, no comments, no waiting.",
 };

@@ -58,7 +58,7 @@ export default function Onboarding() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-bold tracking-widest uppercase text-[var(--brand-solid)]">
-              Welcome to GetReel
+              Welcome to VidSave
             </p>
             <p className="text-base font-bold text-[var(--text-primary)] mt-0.5">
               How it works

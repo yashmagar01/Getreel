@@ -1,4 +1,4 @@
-# GetReel Design Tokens
+# VidSave Design Tokens
 
 Single source of truth for every color, radius, shadow, and font variable used in the app.
 All tokens live in `app/globals.css` `:root` and are consumed via `var(--token-name)`.

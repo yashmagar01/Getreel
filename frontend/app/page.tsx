@@ -240,8 +240,8 @@ export default function Home() {
   return (
     <main className="min-h-screen relative overflow-x-clip pb-24">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] overflow-hidden" aria-hidden>
-        <motion.div animate={{ y: [0, -20, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-25 blur-3xl" style={{ background: "#FF8A65" }} />
-        <motion.div animate={{ y: [0, 20, 0] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-16 right-[-6rem] w-96 h-96 rounded-full opacity-20 blur-3xl" style={{ background: "#FF4D8D" }} />
+        <motion.div animate={{ y: [0, -20, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-25 blur-3xl" style={{ background: "#3B82F6" }} />
+        <motion.div animate={{ y: [0, 20, 0] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-16 right-[-6rem] w-96 h-96 rounded-full opacity-20 blur-3xl" style={{ background: "#1D4ED8" }} />
       </div>
 
       <div className="relative max-w-xl mx-auto px-5">
@@ -366,7 +366,7 @@ export default function Home() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                     Download .mp4
                   </GradientButton>
-                  <div className="rounded-3xl border border-[#FFD9E4] bg-[#FFF0F4] p-5 text-center">
+                  <div className="rounded-3xl border border-[#BFDBFE] bg-[#F0F9FF] p-5 text-center">
                     <p className="text-sm font-bold flex items-center justify-center gap-1.5">✨ Need the hidden resources from this Reel?</p>
                     <p className="text-xs text-[var(--text-secondary)] mt-1 mb-3.5">Find links, get AI breakdown, detect comment bait and more.</p>
                     <GradientButton shimmer onClick={onAnalyze} label="Find Resources">
@@ -439,7 +439,7 @@ export default function Home() {
                       <p className="text-sm font-bold mb-3">Tools mentioned</p>
                       <div className="flex flex-wrap gap-2">
                         {(result.concept?.tools_mentioned?.length ? result.concept.tools_mentioned : ["No tools detected"]).map((t) => (
-                          <span key={t} className="text-[13px] font-semibold px-3.5 py-2 rounded-full bg-[#FFE8EF] text-[var(--brand-solid)]">{t}</span>
+                          <span key={t} className="text-[13px] font-semibold px-3.5 py-2 rounded-full bg-[#DBEAFE] text-[var(--brand-solid)]">{t}</span>
                         ))}
                       </div>
                       {(result.concept?.key_concepts?.length) ? (
@@ -468,7 +468,7 @@ export default function Home() {
         </AnimatePresence>
 
         <footer className="w-full py-10 mt-10 text-center border-t border-black/5">
-          <p className="text-xs text-[var(--text-muted)] tracking-wide">GetReel — No follows. No comments. No waiting.</p>
+          <p className="text-xs text-[var(--text-muted)] tracking-wide">VidSave — No follows. No comments. No waiting.</p>
         </footer>
       </div>
     </main>

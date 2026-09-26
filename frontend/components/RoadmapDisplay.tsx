@@ -331,7 +331,7 @@ function FormulaCard({ description }: { description: string }) {
         </div>
       )}
       
-      <div className="bg-[#FFE8EF] rounded-[16px] p-5 shadow-sm border border-[#FF8A73]/20">
+      <div className="bg-[#DBEAFE] rounded-[16px] p-5 shadow-sm border border-[#FF8A73]/20">
         <div className="space-y-4">
           {formulaText && (
             <div>
@@ -415,7 +415,7 @@ function MistakesSection({ content, delay }: { content: string; delay: string })
   }
   return (
     <SectionCard title="Common Mistakes to Avoid" delay={delay}>
-      <div className="bg-[#FFE8EF] rounded-[20px] p-6">
+      <div className="bg-[#DBEAFE] rounded-[20px] p-6">
         <div className="space-y-3">
           {items.map((item, i) => (
             <div key={i} className="flex gap-2.5 text-sm text-[var(--text-secondary)] leading-relaxed">

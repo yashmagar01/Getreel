@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ── GetReel mockup tokens ─────────────────────────────────────────────── */
+/* ── VidSave mockup tokens ─────────────────────────────────────────────── */
 :root {
   --bg-primary:   #F8F7FB;
   --bg-secondary: #FFFFFF;
@@ -19,14 +19,14 @@
   --text-muted:       #9CA3AF;
   --text-placeholder: #B9B9C7;
 
-  /* ponytail: single gradient source — mockup #FF8A65 → #FF4D8D */
-  --brand-gradient: linear-gradient(135deg, #FF8A65, #FF4D8D);
-  --brand-solid:    #FF4D8D;
-  --brand-dim:      rgba(255, 77, 141, 0.08);
-  --brand-border:   rgba(255, 77, 141, 0.28);
+  /* ponytail: single gradient source — mockup #3B82F6 → #1D4ED8 */
+  --brand-gradient: linear-gradient(135deg, #3B82F6, #1D4ED8);
+  --brand-solid:    #2563EB;
+  --brand-dim:      rgba(37, 99, 235, 0.08);
+  --brand-border:   rgba(37, 99, 235, 0.28);
 
-  --bg-soft-coral: #FFF3F1;
-  --bg-soft-pink:  #FFE8EF;
+  --bg-soft-coral: #F0F9FF;
+  --bg-soft-pink:  #DBEAFE;
   --shadow-premium: 0 12px 32px rgba(20, 20, 40, 0.07);
   --card-border: rgba(17, 18, 31, 0.07);
 
@@ -45,7 +45,7 @@
   --shadow-sm:    0 1px 3px rgba(20, 20, 40, 0.05), 0 1px 2px rgba(20, 20, 40, 0.04);
   --shadow-md:    0 6px 18px rgba(20, 20, 40, 0.07), 0 2px 6px rgba(20, 20, 40, 0.05);
   --shadow-lg:    0 16px 40px rgba(20, 20, 40, 0.10), 0 4px 10px rgba(20, 20, 40, 0.06);
-  --shadow-brand: 0 6px 20px rgba(255, 77, 141, 0.32);
+  --shadow-brand: 0 6px 20px rgba(37, 99, 235, 0.32);
 }
 
 /* ── Base ──────────────────────────────────────────────────────────────── */
@@ -59,7 +59,7 @@
     background-color: var(--bg-primary);
     color: var(--text-primary);
   }
-  ::selection { background: rgba(255, 77, 141, 0.18); }
+  ::selection { background: rgba(37, 99, 235, 0.18); }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 9999px; }
@@ -99,7 +99,7 @@
   .gr-input-glow { position: relative; overflow: hidden; }
   .gr-input-glow::after {
     content: ""; position: absolute; inset: -2px; pointer-events: none;
-    background: linear-gradient(110deg, transparent 30%, rgba(255,77,141,0.35) 50%, transparent 70%);
+    background: linear-gradient(110deg, transparent 30%, rgba(37,99,235,0.35) 50%, transparent 70%);
     background-size: 200% 100%; opacity: 0;
   }
   .gr-input-glow.gr-sweep::after { opacity: 1; animation: gr-sweep 0.6s ease-out; }
@@ -130,7 +130,7 @@
     background: var(--brand-gradient); background-size: 200% auto;
     animation: gr-shimmer 2.6s linear infinite, gr-glow 2.2s ease-in-out infinite;
   }
-  @keyframes gr-glow { 0%, 100% { box-shadow: 0 6px 20px rgba(255,77,141,0.32); } 50% { box-shadow: 0 6px 30px rgba(255,77,141,0.55); } }
+  @keyframes gr-glow { 0%, 100% { box-shadow: 0 6px 20px rgba(37,99,235,0.32); } 50% { box-shadow: 0 6px 30px rgba(37,99,235,0.55); } }
 
   .gr-lift { transition: transform 180ms ease, box-shadow 180ms ease; }
   .gr-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }

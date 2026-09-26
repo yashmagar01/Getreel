@@ -44,10 +44,14 @@ export function Header() {
   return (
     <header className="w-full max-w-xl mx-auto flex items-center justify-between px-1 pt-6">
       <div className="flex items-center gap-2">
-        <span className="w-7 h-7 rounded-full flex items-center justify-center text-white" style={{ background: "var(--brand-gradient)" }} aria-hidden>
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+        <span className="w-7 h-7 rounded-[8px] flex items-center justify-center text-white" style={{ background: "var(--brand-gradient)" }} aria-hidden>
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16" />
+          </svg>
         </span>
-        <span className="font-bold text-[17px] tracking-tight">GetReel</span>
+        <span className="font-bold text-[17px] tracking-tight">
+          <span className="text-black">Vid</span><span style={{ color: "var(--brand-solid)" }}>Save</span>
+        </span>
       </div>
       <span className="w-9 h-9 rounded-full flex items-center justify-center text-[var(--text-secondary)]" aria-hidden>
         <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -347,7 +351,7 @@ export function Confetti({ n = 14 }: { n?: number }) {
   const parts = useMemo(() => Array.from({ length: n }, (_, i) => {
     const a = (i / n) * Math.PI * 2;
     const d = 34 + ((i * 37) % 30);
-    return { x: Math.cos(a) * d, y: Math.sin(a) * d - 10, c: ["#FF4D8D", "#FF8A65", "#22C55E", "#4A90D9", "#F59E0B"][i % 5], s: 5 + ((i * 13) % 4), d: (i % 5) * 0.05 };
+    return { x: Math.cos(a) * d, y: Math.sin(a) * d - 10, c: ["#1D4ED8", "#3B82F6", "#22C55E", "#4A90D9", "#F59E0B"][i % 5], s: 5 + ((i * 13) % 4), d: (i % 5) * 0.05 };
   }), [n]);
   return (
     <span className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden>
@@ -526,7 +530,7 @@ export function ResourceList({ resources }: { resources: Resource[] }) {
         {resources.map((r, i) => (
           <motion.div key={`${r.name}-${i}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.06 }}
             className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] !rounded-2xl !shadow-none p-3.5 flex items-center gap-3 gr-lift">
-            <span className="w-8 h-8 rounded-full bg-[#FFE8EF] text-[var(--brand-solid)] text-[13px] font-extrabold flex items-center justify-center shrink-0">{i + 1}</span>
+            <span className="w-8 h-8 rounded-full bg-[#DBEAFE] text-[var(--brand-solid)] text-[13px] font-extrabold flex items-center justify-center shrink-0">{i + 1}</span>
             <span className="flex-1 min-w-0">
               <span className="block text-sm font-bold truncate">{r.name}</span>
               {r.url && <span className="block text-xs text-[#2563EB] truncate">{r.url}</span>}
