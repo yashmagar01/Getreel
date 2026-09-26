@@ -26,6 +26,7 @@ export interface ReelMeta {
   username: string;
   thumbnail_url: string;
   shortcode: string;
+  view_count?: number;
 }
 
 export type ContentType = "teaser_tutorial" | "entertainment_commentary" | "pure_entertainment" | string;
