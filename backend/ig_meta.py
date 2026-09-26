@@ -125,6 +125,19 @@ def is_numeric_uploader_id(value: str | None) -> bool:
     return bool(value) and bool(_NUMERIC_ID_RE.match(str(value).strip()))
 
 
+def resolve_cookie_path() -> str | None:
+    """Resolve Instagram cookies: $INSTAGRAM_COOKIES_PATH if it exists,
+    else local backend/cookies.txt, else None (caller goes cookieless)."""
+    env_path = (os.getenv("INSTAGRAM_COOKIES_PATH") or "").strip()
+    if env_path and os.path.exists(env_path):
+        return env_path
+    local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+    if os.path.exists(local):
+        logger.info(f"Using local Instagram cookies: {local}")
+        return local
+    return None
+
+
 def writable_cookie_copy(cookies_path: str | None, work_dir: str) -> str | None:
     """Copy a cookie file into a writable directory and return the copy's path.
 

@@ -132,6 +132,24 @@ export function getDownloadUrl(token: string): string {
   return `${BACKEND_URL}/download/${token}`;
 }
 
+// ponytail: instant IG pre-flight for smart preview — mirrors backend /reel-info
+export async function reelInfo(instagramUrl: string): Promise<ReelMeta> {
+  if (!BACKEND_URL) throw new Error("Backend URL is not configured.");
+  const r = await fetch(`${BACKEND_URL}/reel-info`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instagram_url: instagramUrl }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Could not fetch reel metadata");
+  return r.json();
+}
+
+export async function capsuleDetail(id: string): Promise<{ transcript?: string; roadmap_markdown?: string }> {
+  const r = await fetch(`${BACKEND_URL}/capsule/${id}`);
+  if (!r.ok) throw new Error("Capsule not found");
+  return r.json();
+}
+
 export interface FastDownload {
   platform: string;
   download_token: string;

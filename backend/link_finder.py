@@ -33,6 +33,7 @@ import asyncio
 import logging
 import httpx
 from dm_interceptor import intercept_via_dm
+from ig_meta import resolve_cookie_path
 
 logger = logging.getLogger(__name__)
 
@@ -1005,8 +1006,8 @@ def _get_instaloader():
                 ),
                 rate_controller=lambda ctx: _FailFastRateController(ctx),
             )
-            cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
-            if cookies_path and os.path.exists(cookies_path):
+            cookies_path = resolve_cookie_path()
+            if cookies_path:
                 try:
                     import http.cookiejar
                     cj = http.cookiejar.MozillaCookieJar(cookies_path)
@@ -1094,13 +1095,13 @@ def _layer_3c_ytdlp_profile(handle: str) -> dict | None:
         import tempfile
         import yt_dlp
         from ig_meta import writable_cookie_copy
-        cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
+        cookies_path = resolve_cookie_path()
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": True,
         }
-        if cookies_path and os.path.exists(cookies_path):
+        if cookies_path:
             # Stage a writable copy: yt-dlp saves merged cookies back into
             # `cookiefile` on exit, which crashes on read-only secret mounts
             # (OSError Errno 30). See downloader.py.
@@ -1388,6 +1389,7 @@ async def find_promised_link(
     concept: dict,
     caption: str = "",
     comments: list = [],
+    deep: bool = True,
 ) -> dict | None:
     """
     Three-tier parallel link resolver.
@@ -1395,6 +1397,8 @@ async def find_promised_link(
     Tier 2: LLM transcript (sequential) — extracts hints for Tier 3
     Tier 3: network (parallel) — bio, targeted search, YouTube crossref
     Tier 4: last resort (sequential) — generic search, Wayback Machine
+    deep=False stops after Tier 1 (no LLM, no network) — for content with
+    no resource signal where the hunt is pure waste.
     """
     uploader_name = info.get("uploader", "")
     handle = extract_handle_from_url(info)
@@ -1442,7 +1446,6 @@ async def find_promised_link(
 
     for layer_name, layer_fn, layer_args in tier1_layers:
         try:
-            logger.info(f"[LAYER:{layer_name}] starting")
             logger.info(f"[T1:{layer_name}] starting")
             result = await asyncio.wait_for(
                 asyncio.to_thread(layer_fn, *layer_args), timeout=2.0
@@ -1457,14 +1460,18 @@ async def find_promised_link(
         except Exception as e:
             logger.error(f"[T1:{layer_name}] EXCEPTION: {e}")
 
+    if not deep:
+        # ponytail: no resource signal — Tier 1 was the whole hunt
+        logger.info("[RESOLVER] deep=False, stopping after instant tiers")
+        return None
+
     # ── TIER 2: LLM transcript ──────────────────────────────────────────────
     accumulated_hints = {}
     try:
-        logger.info("[LAYER:transcript] starting")
         logger.info("[T2:transcript] starting")
         t2_result = await asyncio.wait_for(
             asyncio.to_thread(_check_transcript, transcript, caption),
-            timeout=12.0
+            timeout=20.0
         )
         if t2_result:
             if "url" in t2_result and not is_junk_url(t2_result.get("url", "")):
@@ -1548,7 +1555,6 @@ async def find_promised_link(
 
     for layer_name, layer_fn, layer_args in tier4_layers:
         try:
-            logger.info(f"[LAYER:{layer_name}] starting")
             logger.info(f"[T4:{layer_name}] starting")
             if asyncio.iscoroutinefunction(layer_fn):
                 coro = layer_fn(*layer_args)

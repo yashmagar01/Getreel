@@ -2,12 +2,14 @@ import os
 from groq import Groq
 
 
-def transcribe_audio(audio_path: str) -> str:
+def transcribe_audio(audio_path: str, hint: str = "") -> str:
     """
     Transcribe an audio file using Groq's Whisper API.
 
     Args:
         audio_path: Path to the audio file (mp3, wav, etc.)
+        hint: Optional vocabulary hint (e.g. the reel caption) biasing
+            proper-noun spelling — "Claude" over "cloud".
 
     Returns:
         Transcript as a plain string.
@@ -21,12 +23,18 @@ def transcribe_audio(audio_path: str) -> str:
 
     client = Groq(api_key=api_key)
 
+    # ponytail: prompt hint is vocabulary bias, not instruction — capped, optional
+    extra: dict = {}
+    if hint and hint.strip():
+        extra["prompt"] = hint.strip()[:400]
+
     try:
         with open(audio_path, "rb") as audio_file:
             response = client.audio.transcriptions.create(
                 model="whisper-large-v3",
                 file=audio_file,
                 response_format="text",  # returns plain string, not JSON
+                **extra,
             )
     except Exception as e:
         raise Exception(f"Groq Whisper transcription failed: {str(e)}")

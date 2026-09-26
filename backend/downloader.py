@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import ffmpeg
 import yt_dlp
-from ig_meta import writable_cookie_copy
+from ig_meta import writable_cookie_copy, resolve_cookie_path
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def download_reel(url: str, temp_dir: str, extract_audio: bool = True) -> dict:
     Fast path (extract_audio=False, used by the instant downloader):
     skips comment extraction and audio rendering — video only.
     """
-    cookies_path = os.getenv("INSTAGRAM_COOKIES_PATH")
+    cookies_path = resolve_cookie_path()
     video_path = os.path.join(temp_dir, "reel.mp4")
     audio_path = os.path.join(temp_dir, "audio.mp3")
 

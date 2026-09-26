@@ -1,149 +1,140 @@
 @import "tailwindcss";
 
-/* ── Design Tokens ──────────────────────────────────────────────────────────── */
+/* ── GetReel mockup tokens ─────────────────────────────────────────────── */
 :root {
-  /* Surfaces */
-  --bg-primary:   #F5F6FA;
+  --bg-primary:   #F8F7FB;
   --bg-secondary: #FFFFFF;
   --bg-card:      #FFFFFF;
-  --bg-elevated:  #FAFAFA;
-  --bg-hover:     #F0F1F8;
+  --bg-elevated:  #F3F2F7;
+  --bg-hover:     #EFEAF6;
 
-  /* Borders */
-  --border-subtle:  rgba(0, 0, 0, 0.06);
-  --border-default: rgba(0, 0, 0, 0.10);
-  --border-hover:   rgba(0, 0, 0, 0.16);
-  --border-active:  rgba(0, 0, 0, 0.24);
+  --border-subtle:  rgba(17, 18, 19, 0.06);
+  --border-default: rgba(17, 18, 19, 0.08);
+  --border-hover:   rgba(17, 18, 19, 0.14);
+  --border-active:  rgba(17, 18, 19, 0.22);
 
-  /* Text */
-  --text-primary:     #111213;
-  --text-secondary:   #4B4B58;
-  --text-tertiary:    #767676;
+  --text-primary:     #14141F;
+  --text-secondary:   #55556A;
+  --text-tertiary:    #76768A;
   --text-muted:       #9CA3AF;
-  --text-placeholder: #C4C4C4;
+  --text-placeholder: #B9B9C7;
 
-  /* Brand */
-  --brand-gradient: linear-gradient(to right, #FF8A73, #FF5D8F);
-  --brand-solid:    #FE6A78;
-  --brand-dim:      rgba(254, 106, 120, 0.10);
-  --brand-border:   rgba(254, 106, 120, 0.25);
+  /* ponytail: single gradient source — mockup #FF8A65 → #FF4D8D */
+  --brand-gradient: linear-gradient(135deg, #FF8A65, #FF4D8D);
+  --brand-solid:    #FF4D8D;
+  --brand-dim:      rgba(255, 77, 141, 0.08);
+  --brand-border:   rgba(255, 77, 141, 0.28);
 
-  /* Premium dashboard surfaces */
   --bg-soft-coral: #FFF3F1;
   --bg-soft-pink:  #FFE8EF;
-  --shadow-premium: 0 8px 24px rgba(15,23,42,.05);
+  --shadow-premium: 0 12px 32px rgba(20, 20, 40, 0.07);
+  --card-border: rgba(17, 18, 31, 0.07);
 
-  /* Info / Status accents (kept separate so CTAs stand out) */
   --accent-info:   #4A90D9;
   --accent-green:  #22c55e;
   --accent-red:    #ef4444;
   --accent-amber:  #f59e0b;
   --accent-purple: #8B5CF6;
 
-  /* Radius scale */
-  --radius-sm:   8px;
-  --radius-md:   12px;
-  --radius-lg:   16px;
-  --radius-xl:   20px;
+  --radius-sm:   10px;
+  --radius-md:   14px;
+  --radius-lg:   20px;
+  --radius-xl:   24px;
   --radius-pill: 9999px;
 
-  /* Shadow scale */
-  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
-  --shadow-lg:    0 8px 24px rgba(0, 0, 0, 0.10), 0 4px 8px rgba(0, 0, 0, 0.06);
-  --shadow-brand: 0 4px 16px rgba(254, 106, 120, 0.25);
+  --shadow-sm:    0 1px 3px rgba(20, 20, 40, 0.05), 0 1px 2px rgba(20, 20, 40, 0.04);
+  --shadow-md:    0 6px 18px rgba(20, 20, 40, 0.07), 0 2px 6px rgba(20, 20, 40, 0.05);
+  --shadow-lg:    0 16px 40px rgba(20, 20, 40, 0.10), 0 4px 10px rgba(20, 20, 40, 0.06);
+  --shadow-brand: 0 6px 20px rgba(255, 77, 141, 0.32);
 }
 
-/* ── Base ───────────────────────────────────────────────────────────────────── */
+/* ── Base ──────────────────────────────────────────────────────────────── */
 @layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { overflow-x: hidden; overflow-x: clip; } /* ponytail: never allow horizontal page scroll — extensions/adblockers inject wide nodes; internal scrollers (tabs, transcript) unaffected */
+  html { scroll-behavior: smooth; }
   body {
-    font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
+    font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     background-color: var(--bg-primary);
     color: var(--text-primary);
   }
-
-  ::selection {
-    background: rgba(254, 106, 120, 0.18);
-    color: var(--text-primary);
-  }
-
+  ::selection { background: rgba(255, 77, 141, 0.18); }
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 9999px; }
-  ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+  button, a { min-height: 0; }
+  :focus-visible { outline: 2px solid var(--brand-solid); outline-offset: 2px; border-radius: 8px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
 }
 
-/* ── Utilities & Animations ─────────────────────────────────────────────────── */
+/* ── Utilities & mockup motion ─────────────────────────────────────────── */
 @layer utilities {
-  @keyframes enter {
-    from { opacity: var(--tw-enter-opacity, 1); transform: translate(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0)); }
-    to   { opacity: 1; transform: translate(0, 0); }
-  }
-  .animate-in                { animation-name: enter; animation-duration: 0.4s; animation-fill-mode: both; }
-  .fade-in                   { --tw-enter-opacity: 0; }
-  .slide-in-from-bottom-2    { --tw-enter-translate-y: 8px; }
-  .slide-in-from-bottom-4    { --tw-enter-translate-y: 16px; }
-  .duration-200              { animation-duration: 200ms; }
-  .duration-300              { animation-duration: 300ms; }
-  .duration-500              { animation-duration: 500ms; }
-  .duration-700              { animation-duration: 700ms; }
-  .duration-1000             { animation-duration: 1000ms; }
-  .delay-100                 { animation-delay: 100ms; }
-  .delay-150                 { animation-delay: 150ms; }
-  .delay-300                 { animation-delay: 300ms; }
-  .delay-500                 { animation-delay: 500ms; }
-  .delay-700                 { animation-delay: 700ms; }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .fade-up { animation: fadeUp 0.5s ease forwards; }
-
-  @keyframes pulse-subtle {
-    0%, 100% { opacity: 0.5; }
-    50%       { opacity: 1; }
-  }
-  .pulse-subtle { animation: pulse-subtle 2s ease-in-out infinite; }
-
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .stage-enter { animation: slideUp 0.3s ease forwards; }
-
-  @keyframes spinner {
-    to { transform: rotate(360deg); }
-  }
-  .spinner { animation: spinner 0.8s linear infinite; }
-
-  @keyframes shimmer {
-    0%   { background-position: -200% center; }
-    100% { background-position: 200% center; }
-  }
+  .animate-in { animation: gr-enter 0.35s ease both; }
+  .fade-in { --gr-o: 0; }
+  .duration-200 { animation-duration: 200ms; }
+  .duration-300 { animation-duration: 300ms; }
+  .duration-500 { animation-duration: 500ms; }
+  @keyframes gr-enter { from { opacity: var(--gr-o, 1); transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .fade-up { animation: gr-enter 0.5s ease both; }
+  .pulse-subtle { animation: gr-pulse 2s ease-in-out infinite; }
+  @keyframes gr-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+  .spinner { animation: gr-spin 0.8s linear infinite; }
+  @keyframes gr-spin { to { transform: rotate(360deg); } }
   .shimmer-text {
     background: var(--brand-gradient);
     background-size: 200% auto;
-    -webkit-background-clip: text;
+    -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: shimmer 3s linear infinite;
+    animation: gr-shimmer 3s linear infinite;
+  }
+  @keyframes gr-shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+  .text-balance { text-wrap: balance; }
+  .bg-brand-gradient { background: var(--brand-gradient); }
+  .text-brand { color: var(--brand-solid); }
+
+  /* mockup: glow sweep across input border */
+  .gr-input-glow { position: relative; overflow: hidden; }
+  .gr-input-glow::after {
+    content: ""; position: absolute; inset: -2px; pointer-events: none;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,77,141,0.35) 50%, transparent 70%);
+    background-size: 200% 100%; opacity: 0;
+  }
+  .gr-input-glow.gr-sweep::after { opacity: 1; animation: gr-sweep 0.6s ease-out; }
+  @keyframes gr-sweep { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* mockup: gradient travel on progress fill */
+  .gr-progress-fill {
+    background: var(--brand-gradient);
+    background-size: 200% 100%;
+    animation: gr-travel 1.6s linear infinite;
+    transition: width 0.4s ease;
+  }
+  @keyframes gr-travel { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+
+  /* mockup: check draw + success pop + confetti */
+  .gr-check-draw { stroke-dasharray: 24; stroke-dashoffset: 24; animation: gr-draw 0.45s ease forwards 0.15s; }
+  @keyframes gr-draw { to { stroke-dashoffset: 0; } }
+  .gr-pop { animation: gr-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  @keyframes gr-pop { 0% { transform: scale(0.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .gr-confetti { position: absolute; width: 6px; height: 6px; border-radius: 9999px; animation: gr-conf 1.1s ease-out forwards; }
+  @keyframes gr-conf {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--cx), var(--cy)) scale(0.4); opacity: 0; }
   }
 
-  .text-balance { text-wrap: balance; }
+  /* mockup: Find Resources shimmer + glow pulse */
+  .gr-cta-shimmer {
+    background: var(--brand-gradient); background-size: 200% auto;
+    animation: gr-shimmer 2.6s linear infinite, gr-glow 2.2s ease-in-out infinite;
+  }
+  @keyframes gr-glow { 0%, 100% { box-shadow: 0 6px 20px rgba(255,77,141,0.32); } 50% { box-shadow: 0 6px 30px rgba(255,77,141,0.55); } }
 
-  /* Brand gradient utility */
-  .bg-brand-gradient { background: var(--brand-gradient); }
-  .text-brand        { color: var(--brand-solid); }
-  .border-brand      { border-color: var(--brand-border); }
+  .gr-lift { transition: transform 180ms ease, box-shadow 180ms ease; }
+  .gr-lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .gr-press:active { transform: scale(0.97); transition-duration: 120ms; }
+
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 }

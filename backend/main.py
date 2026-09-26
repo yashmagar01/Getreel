@@ -18,15 +18,14 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
-from urllib.parse import urlparse
 
 from downloader import download_reel
 from transcriber import transcribe_audio
 from frame_extractor import extract_frames
 from analyzer import analyze_concept
-from roadmap_generator import generate_roadmap
-from content_classifier import classify, normalize_content_type
-from content_strategies import get_strategy
+from roadmap_generator import generate_roadmap, apply_gate_honesty_filter
+from content_classifier import classify, normalize_content_type, PURE_ENTERTAINMENT
+from content_strategies import generate_composite
 from cache import get_cached_result, save_result
 from rate_limiter import check_rate_limit
 from link_finder import find_promised_link
@@ -42,7 +41,6 @@ import json
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi import BackgroundTasks
 import yt_downloader
-import os
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -53,9 +51,6 @@ logger = logging.getLogger(__name__)
 
 
 
-YT_ALLOWED_HOSTS = frozenset({"youtube.com", "youtu.be", "m.youtube.com"})
-
-
 class YTDownloadRequest(BaseModel):
     url: str = Field(..., max_length=2000)
     quality: str = "best" # e.g., '1080p', '720p', '480p', 'audio', 'best'
@@ -64,19 +59,11 @@ class YTDownloadRequest(BaseModel):
     @classmethod
     def _validate_youtube_url(cls, v: str) -> str:
         """Allow only YouTube watch/shorts/share URLs (SSRF guard)."""
-        url = (v or "").strip()
+        # ponytail: single source of truth lives in yt_downloader
         try:
-            parsed = urlparse(url)
-        except Exception:
-            raise ValueError("Invalid URL.")
-        if parsed.scheme not in ("http", "https"):
-            raise ValueError("Only YouTube domains are permitted (http/https YouTube URLs only).")
-        host = (parsed.hostname or "").lower()
-        if host.startswith("www."):
-            host = host[4:]
-        if host not in YT_ALLOWED_HOSTS:
-            raise ValueError("Only YouTube domains are permitted (youtube.com, youtu.be, m.youtube.com).")
-        return url
+            return yt_downloader.assert_youtube_url(v)
+        except ValueError as e:
+            raise ValueError(str(e))
 
 
 # ── Content-strategy helpers (Phase B/C/D: additive, legacy-safe) ─────────────
@@ -165,8 +152,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"ffmpeg startup check FAILED: {e}")
     # Initialize Layer 0 Instagram client (burner account)
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, init_ig_client)
+    # ponytail: init_ig_client is a no-op stub — call directly, no executor
+    init_ig_client()
     
     # Background task for periodic cleanup of expired downloads
     async def periodic_cleanup():
@@ -219,7 +206,7 @@ async def reel_info(request: AnalyzeRequest):
     """
     url = str(request.instagram_url).strip()
 
-    if not INSTAGRAM_REEL_PATTERN.match(url):
+    if not validate_reel_url(url):
         raise HTTPException(
             status_code=400,
             detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
@@ -337,7 +324,7 @@ async def instagram_download(request: AnalyzeRequest):
 async def analyze(request: AnalyzeRequest, req: Request):
     url = str(request.instagram_url).strip()
 
-    if not INSTAGRAM_REEL_PATTERN.match(url):
+    if not validate_reel_url(url):
         raise HTTPException(
             status_code=400,
             detail="Invalid URL. Please paste a link like: https://www.instagram.com/reel/... or https://www.instagram.com/p/..."
@@ -376,6 +363,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                     "from_cache": True,
                     "content_type": content_payload["content_type"],
                     "blocks": content_payload["blocks"],
+                    "secondary_types": cached.get("secondary_types") or [],
+                    "intent_scores": cached.get("intent_scores") or {},
                 })
                 return
 
@@ -423,24 +412,33 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 return
 
             await push("transcribe", "Transcribing audio with Whisper AI...")
-            transcript = transcribe_audio(audio_path)
-
             await push("frames", "Extracting key video frames...")
-            frames = extract_frames(video_path, temp_dir)
+            # ponytail: independent blocking work — one gather, not two awaits.
+            # Caption doubles as Whisper vocabulary hint (proper-noun spelling).
+            transcript, frames = await asyncio.gather(
+                asyncio.to_thread(transcribe_audio, audio_path, description),
+                asyncio.to_thread(extract_frames, video_path, temp_dir),
+            )
 
             await push("analyze", "Analyzing with Llama 4 Scout...")
-            concept = analyze_concept(transcript, frames)
+            # ponytail: blocking network call — off the loop or SSE freezes mid-pipeline.
+            # Caption grounds the concept (disambiguates mistranscribed proper nouns).
+            concept = await asyncio.to_thread(analyze_concept, transcript, frames, description)
 
             await push("classify", "Figuring out what kind of reel this is...")
-            classification = classify(concept, transcript)
+            classification = classify(concept, transcript, caption=description)
             logger.info(f"Content classified as {classification.content_type} (confidence={classification.confidence})")
 
             await push("link", "Hunting for the promised link...")
-            promised_link = await find_promised_link(info, transcript, concept, comments=comments, caption=description)
-
             await push("roadmap", "Writing your result...")
-            strategy = get_strategy(classification.content_type)
-            result = strategy.generate(concept, transcript)
+            # ponytail: link hunt and result generation are independent — run together.
+            # Pure entertainment carries no resource signal: instant link tiers only.
+            promised_link, result = await asyncio.gather(
+                find_promised_link(info, transcript, concept, comments=comments,
+                                   caption=description,
+                                   deep=classification.content_type != PURE_ENTERTAINMENT),
+                asyncio.to_thread(generate_composite, classification, concept, transcript),
+            )
             result["content_type"] = classification.content_type
             blocks = result.get("blocks") or []
             # Legacy `roadmap` field: prefer the strategy's markdown; otherwise
@@ -450,6 +448,11 @@ async def analyze(request: AnalyzeRequest, req: Request):
             if classification.content_type == "teaser_tutorial" and not result.get("roadmap_markdown"):
                 roadmap = generate_roadmap(concept)
                 blocks = [{"type": "markdown_document", "title": "Roadmap", "body": roadmap}]
+
+            # ponytail: gated reel + code fences = invented implementation — strip it
+            roadmap = apply_gate_honesty_filter(roadmap, description)
+            if len(blocks) == 1 and blocks[0].get("type") == "markdown_document":
+                blocks[0]["body"] = roadmap
 
             # Guarantee non-null fields
             roadmap = roadmap or "Unable to generate roadmap. Please try again."
@@ -463,6 +466,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                     "tools_mentioned": concept.get("tools_mentioned") or [],
                     "key_concepts": concept.get("key_concepts") or []
                 })
+            concept.setdefault("claims", [])
+            concept.setdefault("evidence_quality", "low")
 
             # Register video for download
             download_token = register_download(video_path)
@@ -483,9 +488,11 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 "promised_link": promised_link,
                 "content_type": classification.content_type,
                 "blocks": blocks,
+                "secondary_types": classification.secondary_types,
+                "intent_scores": classification.intent_scores,
             }
             capsule_id = create_capsule(capsule_data)
-            
+
             await queue.put({
                 "type": "done",
                 "roadmap": roadmap,
@@ -496,6 +503,8 @@ async def analyze(request: AnalyzeRequest, req: Request):
                 "capsule_id": capsule_id,
                 "content_type": classification.content_type,
                 "blocks": blocks,
+                "secondary_types": classification.secondary_types,
+                "intent_scores": classification.intent_scores,
             })
 
         except Exception as e:
@@ -543,6 +552,18 @@ async def get_capsule_endpoint(capsule_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Capsule not found")
     return data
+
+
+@app.post("/api/youtube/info")
+async def youtube_info(req: YTDownloadRequest):
+    """Metadata preflight for the YT preview card — no download (mirrors /reel-info)."""
+    try:
+        return JSONResponse(await yt_downloader.get_yt_info(req.url))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.warning(f"YouTube info prefetch failed: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.post("/api/youtube/download")

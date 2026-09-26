@@ -75,8 +75,9 @@ async def intercept_via_dm(
         return None
 
     async with async_playwright() as p:
-        # Launch browser - headless=False so user can see what's happening
-        browser = await p.chromium.launch(headless=False)
+        # ponytail: headless by default (servers have no display); opt-out via PLAYWRIGHT_HEADLESS=0
+        _headless = os.getenv("PLAYWRIGHT_HEADLESS", "1").strip().lower() not in ("0", "false", "no", "off")
+        browser = await p.chromium.launch(headless=_headless)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )

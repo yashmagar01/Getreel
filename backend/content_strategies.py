@@ -220,3 +220,51 @@ class PureEntertainmentStrategy(ContentStrategy):
 
 
 register(PureEntertainmentStrategy())
+
+
+# ── Weighted composition (URIE-lite): one LLM call max + cheap template cards ──
+
+def _reality_check_block(concept: dict) -> dict:
+    """Zero-LLM bait card: promise vs what was actually shown."""
+    shows = str(concept.get("what_creator_shows") or "what was shown on screen").strip()
+    withheld = str(concept.get("what_creator_withholds") or "None").strip()
+    body = (
+        f"Promised value lives behind a comment/DM gate ({withheld[:200]}). "
+        f"Actually shown: {shows[:300]}."
+        if withheld.lower() not in {"", "none"} else
+        f"Engagement prompt detected, but the reel itself shows: {shows[:300]}."
+    )
+    return {"type": "quick_summary", "title": "Reality Check", "body": body}
+
+
+def _evidence_block(concept: dict) -> dict:
+    """Zero-LLM evidence card — reuses existing list_section renderer."""
+    claims = concept.get("claims") or []
+    items = [f"{c.get('text', '')} [{c.get('evidence', 'unverified')}]" for c in claims[:8]]
+    return {"type": "list_section", "title": "Evidence",
+            "items": items or ["No verifiable claims extracted."]}
+
+
+def generate_composite(classification, concept: dict, transcript: str) -> dict:
+    """Primary strategy output + cheap secondary cards for hybrid reels."""
+    concept = concept or {}
+    strategy = get_strategy(classification.content_type)
+    result = strategy.generate(concept, transcript)
+    blocks = list(result.get("blocks") or [])
+    secondary = list(getattr(classification, "secondary_types", None) or [])
+    scores = dict(getattr(classification, "intent_scores", None) or {})
+
+    # ponytail: templates only — never a second LLM call for a side card
+    if "engagement_bait" in secondary and not any(b.get("title") == "Reality Check" for b in blocks):
+        blocks.append(_reality_check_block(concept))
+    if "product_promo" in secondary and not any(b.get("title") == "Product Note" for b in blocks):
+        blocks.append({"type": "quick_summary", "title": "Product Note",
+                       "body": "Promotional signal detected — claims below are creator claims, not verified specs."})
+    if concept.get("claims") and not any(b.get("title") == "Evidence" for b in blocks):
+        blocks.append(_evidence_block(concept))
+
+    out = dict(result)
+    out["blocks"] = blocks
+    out["secondary_types"] = secondary
+    out["intent_scores"] = scores
+    return out

@@ -9,6 +9,24 @@ const YOUTUBE_RE   = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([A-Za
 
 type Platform = "instagram" | "youtube" | null;
 
+interface YtMeta {
+  title: string;
+  thumbnail?: string | null;
+  duration?: number | null;
+  uploader?: string | null;
+}
+
+function formatDuration(totalSeconds?: number | null): string | null {
+  if (totalSeconds == null || !isFinite(totalSeconds)) return null;
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+    : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
 function detectPlatform(url: string): Platform {
   if (INSTAGRAM_RE.test(url)) return "instagram";
   if (YOUTUBE_RE.test(url))   return "youtube";
@@ -45,11 +63,41 @@ export default function LinkInputCard({
   const [platform, setPlatform]     = useState<Platform>(null);
   const [quality, setQuality]       = useState("best");
   const [localError, setLocalError] = useState("");
-  const [ytLoading, setYtLoading]   = useState(false);
-  const [mounted, setMounted]       = useState(false);
+  const [ytLoading, setYtLoading] = useState(false);
+  const [ytMeta, setYtMeta] = useState<YtMeta | null>(null);
+  const [ytMetaLoading, setYtMetaLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
+
+  // YouTube metadata preflight — debounced, silent fail keeps today's behavior
+  useEffect(() => {
+    const trimmed = url.trim();
+    if (platform !== "youtube" || !YOUTUBE_RE.test(trimmed)) {
+      setYtMeta(null);
+      return;
+    }
+    let cancelled = false;
+    setYtMetaLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/youtube/info`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ url: trimmed, quality: "best" }),
+        });
+        if (!resp.ok) throw new Error();
+        const data: YtMeta = await resp.json();
+        if (!cancelled) setYtMeta(data);
+      } catch {
+        if (!cancelled) setYtMeta(null);
+      } finally {
+        if (!cancelled) setYtMetaLoading(false);
+      }
+    }, 600);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [url, platform]);
 
   const error = localError || externalError;
 
@@ -109,7 +157,7 @@ export default function LinkInputCard({
     }
   };
 
-  // ── Instagram submit ────────────────────────────────────────────────────────
+  // ── Instagram submit (Flow A: fast download first) ──────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError("");
@@ -242,7 +290,39 @@ export default function LinkInputCard({
           </PrimaryButton>
         </div>
 
-        {/* YouTube quality picker — slides in when YT link detected */}
+        {/* YouTube preview + quality picker — slides in when YT link detected */}
+        {platform === "youtube" && (ytMetaLoading || ytMeta) && (
+          <div className="flex items-center gap-3 px-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {ytMetaLoading && !ytMeta ? (
+              <div className="flex items-center gap-3 w-full">
+                <div className="w-28 h-16 rounded-lg bg-[var(--bg-elevated)] animate-pulse shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 rounded bg-[var(--bg-elevated)] animate-pulse w-3/4" />
+                  <div className="h-2.5 rounded bg-[var(--bg-elevated)] animate-pulse w-1/3" />
+                </div>
+              </div>
+            ) : ytMeta ? (
+              <>
+                {ytMeta.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={ytMeta.thumbnail}
+                    alt=""
+                    className="w-28 h-16 rounded-lg object-cover shrink-0 border border-[var(--border-default)]"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : null}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{ytMeta.title}</p>
+                  <p className="text-xs text-[var(--text-muted)] truncate">
+                    {[ytMeta.uploader, formatDuration(ytMeta.duration)].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
         {platform === "youtube" && (
           <div className="flex flex-wrap gap-2 px-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {QUALITY_OPTIONS.map((opt) => (

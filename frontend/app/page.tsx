@@ -1,478 +1,476 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import LinkInputCard from "@/components/LinkInputCard";
-import LoadingState from "@/components/LoadingState";
-import ReelPreviewCard from "@/components/ReelPreviewCard";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import RoadmapDisplay from "@/components/RoadmapDisplay";
-import PromisedLinkCTA from "@/components/PromisedLinkCTA";
-import { DownloadButton } from "@/components/DownloadButton";
-import CapsuleShare from "@/components/CapsuleShare";
-import PlatformIconGrid from "@/components/ui/PlatformIconGrid";
-import Onboarding from "@/components/Onboarding";
-import BottomNav from "@/components/BottomNav";
-import { analyzeReel, type ProgressEvent, type ReelMeta } from "@/lib/api";
+import { analyzeReel, downloadInstagram, getDownloadUrl, reelInfo, capsuleDetail, type ProgressEvent, type ReelMeta } from "@/lib/api";
+import {
+  detectPlatform, formatDuration, formatViews, formatMB, INSTAGRAM_RE,
+  Header, TopBadge, Hero, SmartInput, PlatformCards, DetectionBanner, GradientButton,
+  IgPreview, YtPreview, YtOptions, DownloadProgress, SuccessCheck, DownloadedCard,
+  AnalysisTimeline, AnalysisLiveCards, ReportTabs, ResourceList, extractLinks, stripMd, aiIndexFor,
+  type Platform, type Resource,
+} from "@/components/states";
 
-type Result = ProgressEvent;
-type Platform = "instagram" | "youtube" | null;
+type Stage = "idle" | "preview" | "downloading" | "success" | "analyzing" | "report";
+const EASE = [0.22, 1, 0.36, 1] as const;
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
-// ── Premium dashboard helpers (UI-only, no LLM logic) ─────────────────────────
-function extractTeaching(roadmap?: string): string {
-  if (!roadmap) return "";
-  const parts = roadmap.split(/(?:^|\n)##\s+/).filter(Boolean);
-  for (const part of parts) {
-    const lines = part.split("\n");
-    const title = (lines[0] || "").toLowerCase();
-    if (title.includes("teaching")) {
-      return lines.slice(1).join("\n").trim();
-    }
-  }
-  return "";
-}
+interface YtMeta { title: string; thumbnail?: string | null; duration?: number | null; uploader?: string | null; view_count?: number | null; }
 
-function stripMarkdown(s: string): string {
-  return s
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
-    .replace(/\*\*/g, "")
-    .replace(/\*/g, "")
-    .replace(/^[#>\-\*]+\s*/gm, "")
-    .replace(/`/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractQuote(teachingRaw: string): string | null {
-  if (!teachingRaw) return null;
-  const bold = teachingRaw.match(/\*\*(.+?)\*\*/);
-  if (bold && bold[1].trim().length > 10) return bold[1].trim();
-  const quoted = teachingRaw.match(/["“]([^"”]{10,220})["”]/);
-  if (quoted) return quoted[1].trim();
-  return null;
-}
-
-function estimateReadTime(roadmap?: string): string {
-  if (!roadmap) return "3 min";
-  const words = roadmap.split(/\s+/).filter(Boolean).length;
-  const mins = Math.max(1, Math.round(words / 200));
-  return `${mins} min`;
-}
-
-function getSourceUrl(meta: ReelMeta | null, result: Result): string | null {
-  if (result.promised_link?.reel_url) return result.promised_link.reel_url;
-  if (meta?.shortcode) return `https://www.instagram.com/reel/${meta.shortcode}/`;
-  return null;
-}
-
-// ── Content-type display labels (Phase D/E: section title + sidebar) ─────────
-function sectionTitleFor(contentType?: string): string {
-  switch (contentType) {
-    case "entertainment_commentary": return "Breakdown";
-    case "pure_entertainment":       return "Quick Recap";
-    default:                        return "Roadmap";
-  }
-}
-
-function contentTypeLabel(contentType?: string): string {
-  switch (contentType) {
-    case "teaser_tutorial":          return "Tutorial breakdown";
-    case "entertainment_commentary": return "Entertainment breakdown";
-    case "pure_entertainment":       return "Quick recap";
-    default:                         return "Tutorial breakdown";
-  }
+function tagsFrom(title: string): string[] {
+  const tags = title.match(/#(\w+)/g)?.map((t) => t.slice(1)) || [];
+  return tags.slice(0, 3);
 }
 
 export default function Home() {
-  const [isLoading, setIsLoading]       = useState(false);
-  const [currentStage, setCurrentStage] = useState<string>("");
-  const [meta, setMeta]                 = useState<ReelMeta | null>(null);
-  const [result, setResult]             = useState<Result | null>(null);
-  const [downloadToken, setDownloadToken] = useState<string | null>(null);
-  // Flow A state: fast download finished, AI not yet run
-  const [downloadedUrl, setDownloadedUrl]     = useState<string | null>(null);
-  const [downloadedToken, setDownloadedToken] = useState<string | null>(null);
-  const [error, setError]               = useState<string | null>(null);
-  const [activePlatform, setActivePlatform] = useState<Platform>(null);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [url, setUrl] = useState("");
+  const [platform, setPlatform] = useState<Platform>(null);
+  const [sweep, setSweep] = useState(0);
+  const [error, setError] = useState("");
 
-  // Flow A — instant download already triggered the browser save;
-  // remember the token so Flow B can reuse the server-side file.
-  const handleDownloaded = useCallback((url: string, token: string) => {
-    setDownloadedUrl(url);
-    setDownloadedToken(token);
-    setDownloadToken(token);
-    setError(null);
+  const [igMeta, setIgMeta] = useState<ReelMeta | null>(null);
+  const [igLoading, setIgLoading] = useState(false);
+  const [ytMeta, setYtMeta] = useState<YtMeta | null>(null);
+  const [ytLoading, setYtLoading] = useState(false);
+  const [ytQuality, setYtQuality] = useState("best");
+
+  const [progress, setProgress] = useState(0);
+  const [dlTitle, setDlTitle] = useState("");
+  const [dlThumb, setDlThumb] = useState<string | null>(null);
+  const [dlMeta, setDlMeta] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [igDuration, setIgDuration] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [ytBlob, setYtBlob] = useState<string | null>(null);
+  const [ytFile, setYtFile] = useState("video.mp4");
+  const [ytSize, setYtSize] = useState<number | null>(null);
+  const [mp3Size, setMp3Size] = useState<number | null>(null);
+  const [thumbSize, setThumbSize] = useState<number | null>(null);
+
+  const [aiStage, setAiStage] = useState("download");
+  const [result, setResult] = useState<ProgressEvent | null>(null);
+  const [transcript, setTranscript] = useState("");
+  const [reportTab, setReportTab] = useState("Overview");
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── URL → platform + metadata preflight ──
+  const onUrl = useCallback((v: string) => {
+    setUrl(v); setError("");
+    const p = detectPlatform(v);
+    setPlatform((prev) => { if (p !== prev && p) setSweep((s) => s + 1); return p; });
+    if (!p) { setIgMeta(null); setYtMeta(null); setStage((s) => (s === "preview" ? "idle" : s)); }
+    else setStage((s) => (s === "idle" ? "preview" : s));
   }, []);
 
-  const handleAnalyze = async (url: string, token?: string | null) => {
-    setIsLoading(true);
-    setResult(null);
-    setMeta(null);
-    setDownloadToken(null);
-    setError(null);
-    setCurrentStage("rate_limit");
-
-    try {
-      const res = await analyzeReel(url, (event) => {
-        if (event.type === "meta" && event.meta) {
-          setMeta(event.meta);
-        } else if (event.type === "progress" && event.stage) {
-          setCurrentStage(event.stage);
-        }
-      }, token ?? downloadedToken);
-      setResult(res);
-      setDownloadToken(res.download_token ?? token ?? downloadedToken);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    const t = url.trim();
+    if (!platform || !t) return;
+    let dead = false;
+    if (platform === "instagram" && INSTAGRAM_RE.test(t)) {
+      setIgLoading(true);
+      const h = setTimeout(async () => {
+        try { const m = await reelInfo(t); if (!dead) setIgMeta(m); }
+        catch { if (!dead) setIgMeta(null); }
+        finally { if (!dead) setIgLoading(false); }
+      }, 500);
+      return () => { dead = true; clearTimeout(h); };
     }
-  };
+    if (platform === "youtube") {
+      setYtLoading(true);
+      const h = setTimeout(async () => {
+        try {
+          const r = await fetch(`${BACKEND}/api/youtube/info`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: t, quality: "best" }) });
+          if (!r.ok) throw new Error();
+          const m: YtMeta = await r.json();
+          if (!dead) setYtMeta(m);
+        } catch { if (!dead) setYtMeta(null); }
+        finally { if (!dead) setYtLoading(false); }
+      }, 600);
+      return () => { dead = true; clearTimeout(h); };
+    }
+  }, [url, platform]);
 
-  const handleReset = useCallback(() => {
-    setResult(null);
-    setMeta(null);
-    setDownloadToken(null);
-    setDownloadedUrl(null);
-    setDownloadedToken(null);
-    setError(null);
-    setCurrentStage("");
+  // fake staged progress while the real fetch runs
+  useEffect(() => {
+    if (stage === "downloading") {
+      setProgress(4);
+      timer.current = setInterval(() => setProgress((p) => Math.min(90, p + (90 - p) * 0.07 + 0.5)), 180);
+    } else if (timer.current) clearInterval(timer.current);
+    return () => { if (timer.current) clearInterval(timer.current); };
+  }, [stage]);
+
+  const reset = useCallback(() => {
+    setStage("idle"); setUrl(""); setPlatform(null); setError("");
+    setIgMeta(null); setYtMeta(null); setResult(null); setToken(null);
+    setYtBlob(null); setYtSize(null); setMp3Size(null); setThumbSize(null);
+    setProgress(0); setReportTab("Overview"); setTranscript("");
   }, []);
+
+  function saveBlob(blob: Blob, name: string) {
+    const u = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = u; a.download = name; a.click();
+    setTimeout(() => window.URL.revokeObjectURL(u), 4000);
+  }
+
+  // ── Download ──
+  async function onDownload() {
+    const t = url.trim();
+    if (!t || !platform) { setError("Paste an Instagram Reel or YouTube URL to get started."); return; }
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      if (platform === "instagram") {
+        const title = igMeta?.title || "Instagram Reel";
+        setDlTitle(title); setDlThumb(igMeta?.thumbnail_url ?? null);
+        setDlMeta(igDuration ? `${formatDuration(igDuration)} · 1080×1920` : "Fetching video...");
+        setStage("downloading");
+        const res = await downloadInstagram(t);
+        setIgDuration(res.duration ?? null);
+        setDlThumb(res.thumbnail ?? igMeta?.thumbnail_url ?? null);
+        setDlTitle(res.title || title);
+        setDlMeta(`${res.duration ? formatDuration(res.duration) + " · " : ""}1080×1920`);
+        setToken(res.download_token);
+        setProgress(100);
+        const a = document.createElement("a");
+        a.href = getDownloadUrl(res.download_token); a.setAttribute("download", ""); a.click();
+        setTimeout(() => setStage("success"), 450);
+      } else {
+        if (ytQuality === "thumb") { await downloadThumb(); return; }
+        const m = ytMeta;
+        setDlTitle(m?.title || "YouTube video"); setDlThumb(m?.thumbnail ?? null);
+        setDlMeta(`${m?.duration ? formatDuration(m.duration) + " · " : ""}1080p`);
+        setStage("downloading");
+        const r = await fetch(`${BACKEND}/api/youtube/download`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: t, quality: ytQuality }) });
+        if (!r.ok) throw new Error((await r.text().catch(() => "")) || "Download failed");
+        const blob = await r.blob();
+        const disp = r.headers.get("Content-Disposition");
+        const name = disp?.match(/filename="?([^";]+)"?/)?.[1] || (ytQuality === "audio" ? "audio.m4a" : "video.mp4");
+        setYtFile(name); setYtSize(blob.size);
+        setDlMeta(`${m?.duration ? formatDuration(m.duration) + " · " : ""}${formatMB(blob.size) || ""} · 1080p`);
+        const u = window.URL.createObjectURL(blob);
+        setYtBlob(u);
+        const a = document.createElement("a"); a.href = u; a.download = name; a.click();
+        setProgress(100);
+        setTimeout(() => setStage("success"), 450);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Download failed");
+      setStage("preview");
+    } finally { setBusy(false); }
+  }
+
+  async function downloadThumb() {
+    const src = ytMeta?.thumbnail;
+    if (!src) { setError("No thumbnail available for this video."); return; }
+    try {
+      const r = await fetch(src);
+      const b = await r.blob();
+      setThumbSize(b.size);
+      saveBlob(b, "thumbnail.jpg");
+    } catch { window.open(src, "_blank"); }
+  }
+
+  async function downloadMp3() {
+    const t = url.trim();
+    setBusy(true);
+    try {
+      const r = await fetch(`${BACKEND}/api/youtube/download`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: t, quality: "audio" }) });
+      if (!r.ok) throw new Error("Audio download failed");
+      const b = await r.blob();
+      setMp3Size(b.size);
+      saveBlob(b, ytFile.replace(/\.\w+$/, "") + ".m4a");
+    } catch (e) { setError(e instanceof Error ? e.message : "Audio download failed"); }
+    finally { setBusy(false); }
+  }
+
+  // ── Find Resources (Flow B) ──
+  async function onAnalyze() {
+    const t = url.trim();
+    if (!t) return;
+    setStage("analyzing"); setAiStage("download"); setResult(null);
+    try {
+      const res = await analyzeReel(t, (ev) => {
+        if (ev.type === "meta" && ev.meta) setIgMeta(ev.meta);
+        else if (ev.type === "progress" && ev.stage) setAiStage(ev.stage);
+      }, token);
+      setResult(res);
+      if (res.download_token) setToken(res.download_token);
+      setReportTab("Overview");
+      setStage("report");
+      if (res.capsule_id) capsuleDetail(res.capsule_id).then((c) => setTranscript(c.transcript || "")).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Analysis failed");
+      setStage("success");
+    }
+  }
+
+  const aiIdx = aiIndexFor(aiStage);
+  const aiPct = Math.round(((aiIdx + 1) / 6) * 100);
+
+  const resources: Resource[] = (() => {
+    if (!result) return [];
+    const out: Resource[] = [];
+    const seen = new Set<string>();
+    const push = (name: string, u?: string) => {
+      const k = (u || name).toLowerCase();
+      if (seen.has(k)) return; seen.add(k);
+      out.push({ name, url: u });
+    };
+    const pl = result.promised_link;
+    if (pl?.url) push(pl.label || pl.description || "Mentioned link", pl.url);
+    for (const l of extractLinks(result.roadmap)) {
+      try { push(new URL(l).hostname.replace(/^www\./, ""), l); } catch { push(l, l); }
+    }
+    for (const tool of result.concept?.tools_mentioned || []) push(tool);
+    return out.slice(0, 12);
+  })();
+
+  const summary = stripMd(result?.roadmap).slice(0, 320);
+  const counts = { resources: resources.length };
+  const ytDur = ytMeta?.duration ? formatDuration(ytMeta.duration) : null;
+  const igName = (igMeta?.username || "techwithyash").replace(/^@/, "");
+  const igTitle = igMeta?.title || (igLoading ? "Loading preview..." : "5 AI Tools You Must Try in 2025!");
+  const ytTitle = ytMeta?.title || (ytLoading ? "Loading preview..." : "Build a Modern Website with React.js in 10 Minutes");
+  const ytChannel = ytMeta?.uploader || "CodeWithHarry";
 
   return (
-    <>
-      <Onboarding />
+    <main className="min-h-screen relative overflow-x-clip pb-24">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[480px] overflow-hidden" aria-hidden>
+        <motion.div animate={{ y: [0, -20, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-25 blur-3xl" style={{ background: "#FF8A65" }} />
+        <motion.div animate={{ y: [0, 20, 0] }} transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }} className="absolute -top-16 right-[-6rem] w-96 h-96 rounded-full opacity-20 blur-3xl" style={{ background: "#FF4D8D" }} />
+      </div>
 
-      <main className="min-h-screen relative pb-16 md:pb-0">
+      <div className="relative max-w-xl mx-auto px-5">
+        <Header />
 
-        {/* ── VIEW: Idle / Input ─────────────────────────────────────────── */}
-        {!result && !isLoading && (
-          <div className="flex flex-col items-center px-6 pt-20 pb-24 max-w-3xl mx-auto min-h-screen">
-
-            {/* Badge */}
-            <div className="mb-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[var(--radius-pill)] bg-[var(--brand-dim)] border border-[var(--brand-border)] text-xs font-semibold tracking-widest uppercase text-[var(--brand-solid)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--brand-solid)] pulse-subtle" />
-              Fast Downloader · Optional AI
-            </div>
-
-            {/* Hero */}
-            <h1 className="text-4xl md:text-[3.5rem] font-bold text-center mb-4 leading-tight tracking-tight text-balance max-w-2xl text-[var(--text-primary)]">
-              Paste a link.{" "}
-              <span className="shimmer-text">Get everything.</span>
-            </h1>
-
-            <p className="text-[var(--text-secondary)] text-center text-base md:text-lg max-w-md mb-10 leading-relaxed">
-              Fast Instagram & YouTube downloader. Need the hidden links too? Find Resources runs the full AI breakdown — Instagram only.
-            </p>
-
-            {/* Unified input */}
-            <LinkInputCard
-              onInstagramDownloaded={handleDownloaded}
-              isLoading={isLoading}
-              error={error || ""}
-              onPlatformChange={setActivePlatform}
-            />
-
-            {/* Flow A done → offer Flow B (Instagram only) */}
-            {downloadedToken && downloadedUrl && (
-              <div className="w-full max-w-xl mx-auto mt-6 p-5 rounded-[var(--radius-lg)] bg-white border border-[var(--border-default)] shadow-[var(--shadow-sm)] text-center space-y-3 animate-in fade-in duration-300">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">✅ Video downloaded</p>
-                <p className="text-sm text-[var(--text-secondary)]">Need the hidden resources from this Reel?</p>
-                <div className="space-y-2">
-                  {downloadedToken && <DownloadButton token={downloadedToken} />}
-                  <button
-                    onClick={() => handleAnalyze(downloadedUrl, downloadedToken)}
-                    className="w-full text-sm font-bold px-6 py-2.5 rounded-full text-white hover:opacity-90 transition-opacity"
-                    style={{ background: "var(--brand-gradient)" }}
-                  >
-                    Find Resources
-                  </button>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)]">Hidden links · Caption analysis · AI breakdown · Comment bait detection</p>
+        <AnimatePresence mode="wait" initial={false}>
+          {/* ── INPUT VIEW (IDLE + PREVIEW) ── */}
+          {(stage === "idle" || stage === "preview") && (
+            <motion.div key="input-view" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35, ease: EASE }}
+              className={`flex flex-col pt-6 ${stage === "preview" ? "gap-3.5" : "items-center gap-6"}`}>
+              
+              <TopBadge text="FAST DOWNLOADER · OPTIONAL AI" />
+              
+              <div className="text-center mt-1">
+                <h1 className={`leading-tight font-extrabold tracking-tight ${stage === 'preview' ? 'text-[2rem]' : 'text-[2.6rem] md:text-5xl'}`}>
+                  Paste a link.<br /><span className="shimmer-text">Get everything.</span>
+                </h1>
+                {stage === "idle" && (
+                  <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.08, ease: EASE }}
+                    className="text-[var(--text-secondary)] text-[15px] leading-relaxed max-w-md mx-auto mt-4">
+                    Fast Instagram & YouTube downloader. Need hidden resources too? Find Resources runs the full AI breakdown — Instagram only.
+                  </motion.p>
+                )}
               </div>
-            )}
 
-            {/* Platform grid */}
-            <div className="mt-10 flex flex-col items-center gap-3">
-              <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest font-semibold">Supported platforms</p>
-              <PlatformIconGrid activePlatform={activePlatform} />
-            </div>
-
-            {/* Feature pills */}
-            <div className="flex flex-wrap gap-2 mt-10 justify-center">
-              {[
-                "Audio Transcribed",
-                "Frames Analyzed",
-                "AI Roadmap",
-                "Results Cached",
-                "YT Quality Picker",
-              ].map((label) => (
-                <span
-                  key={label}
-                  className="text-xs px-3 py-1.5 rounded-[var(--radius-pill)] bg-white border border-[var(--border-default)] text-[var(--text-muted)] tracking-wide shadow-[var(--shadow-sm)]"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── VIEW: Loading ──────────────────────────────────────────────── */}
-        {isLoading && (
-          <div className="min-h-screen flex items-center justify-center px-6 py-12">
-            {meta ? (
-              <ReelPreviewCard meta={meta} currentStage={currentStage} />
-            ) : (
-              <LoadingState currentStage={currentStage} />
-            )}
-          </div>
-        )}
-
-        {/* ── VIEW: Result ───────────────────────────────────────────────── */}
-        {result && !isLoading && (
-          <div className="animate-in fade-in duration-500">
-            {/* Sticky header */}
-            <header className="sticky top-0 z-50 border-b border-[var(--border-default)] bg-white/90 backdrop-blur-xl shadow-[var(--shadow-sm)]">
-              <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-                <button
-                  onClick={handleReset}
-                  className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--brand-solid)] transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-                  </svg>
-                  Decode another
-                </button>
-
-                <span
-                  className="text-[10px] font-bold tracking-[0.15em] uppercase text-white px-3 py-1.5 rounded-[var(--radius-pill)]"
-                  style={{ background: "var(--brand-gradient)" }}
-                >
-                  Analysis Complete
-                </span>
+              <div className="w-full">
+                <SmartInput value={url} onChange={onUrl} onSubmit={onDownload} loading={busy} platform={platform} sweepKey={sweep} error={error} />
               </div>
-            </header>
 
-            <div className="py-12">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-14 max-w-[1400px] mx-auto px-8">
-
-                {/* ── LEFT COLUMN (Main Content) ── */}
-                <div className="md:col-span-8 space-y-12 min-w-0">
-
-                  {/* Topic */}
-                  <section className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-6 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                      <p className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Topic</p>
-                    </div>
-                    <h2 className="text-3xl md:text-5xl font-extrabold leading-[1.15] text-balance text-[var(--text-primary)]">
-                      {result.concept?.topic || "What this reel is actually teaching"}
-                    </h2>
-                    {result.concept?.target_audience && (
-                      <div className="flex items-center gap-2.5 text-sm text-[var(--text-secondary)] mt-2">
-                        <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold border border-[var(--border-default)] px-2 py-0.5 rounded-[var(--radius-pill)] bg-white">Audience</span>
-                        <span>{result.concept.target_audience}</span>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Quick Take hero */}
-                  {(() => {
-                    const teachingRaw = extractTeaching(result.roadmap);
-                    const teachingPlain = stripMarkdown(teachingRaw).slice(0, 420);
-                    const quote = extractQuote(teachingRaw);
-                    if (!teachingPlain) return null;
-                    return (
-                      <section className="bg-[#FFF3F1] rounded-[24px] p-7">
-                        <div className="flex flex-col sm:flex-row gap-6">
-                          {/* Thumbnail */}
-                          <div className="shrink-0 w-40 h-52 rounded-lg overflow-hidden bg-white/60 border border-white shadow-[0_8px_24px_rgba(15,23,42,.05)]">
-                            {meta?.thumbnail_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={`https://wsrv.nl/?url=${encodeURIComponent(meta.thumbnail_url)}&h=420`}
-                                alt="Reel thumbnail"
-                                className="w-full h-full object-cover"
-                                loading="eager"
-                                crossOrigin="anonymous"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div
-                                className="w-full h-full flex items-center justify-center text-white text-3xl font-extrabold"
-                                style={{ background: "var(--brand-gradient)" }}
-                              >
-                                {(result.concept?.topic || "R").charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                          </div>
-                          {/* Core lesson */}
-                          <div className="flex-1 min-w-0 space-y-4">
-                            <p className="text-[11px] font-extrabold tracking-[0.2em] uppercase text-[var(--brand-solid)] flex items-center gap-1.5">
-                              <span className="text-sm">💡</span> What this reel is actually teaching
-                            </p>
-                            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed">
-                              {teachingPlain}{teachingPlain.length >= 420 ? "…" : ""}
-                            </p>
-                            {quote && (
-                              <div className="bg-white rounded-lg p-4 italic text-sm text-[var(--text-primary)] leading-relaxed border border-[#E8E8EC] shadow-[0_8px_24px_rgba(15,23,42,.05)]">
-                                “{quote}”
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </section>
-                    );
-                  })()}
-
-                  {/* Promised Link */}
-                  <section>
-                    {result.promised_link ? (
-                      <PromisedLinkCTA link={result.promised_link} />
+              <AnimatePresence mode="wait">
+                {stage === "idle" && (
+                  <motion.div key="cards" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: EASE }} className="w-full">
+                    <PlatformCards />
+                  </motion.div>
+                )}
+                {stage === "preview" && platform && (
+                  <motion.div key="preview-expand" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: EASE }} className="w-full flex flex-col gap-3.5">
+                    <DetectionBanner platform={platform} />
+                    {platform === "instagram" ? (
+                      <IgPreview title={igTitle} creator={igName} thumb={igMeta?.thumbnail_url} duration={igDuration ? formatDuration(igDuration) : "0:27"} tags={tagsFrom(igMeta?.title || "")} views={igMeta?.view_count ? formatViews(igMeta.view_count) : null} uploadAge="2 days ago" />
                     ) : (
-                      <div className="flex flex-col items-center justify-center gap-3 p-8 rounded-[var(--radius-lg)] bg-[var(--bg-elevated)] border border-[var(--border-default)] shadow-sm text-center">
-                        <div className="w-12 h-12 rounded-full bg-[var(--bg-hover)] flex items-center justify-center">
-                          <svg className="w-6 h-6 text-[var(--text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-base font-semibold text-[var(--text-primary)]">No link found</p>
-                          <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm mx-auto">No specific link was mentioned in this reel.</p>
-                        </div>
-                      </div>
+                      <>
+                        <YtPreview title={ytTitle} channel={ytChannel} thumb={ytMeta?.thumbnail} duration={ytDur} meta={ytMeta?.view_count ? `${formatViews(ytMeta.view_count)} · 1 month ago` : "1 month ago"} views={null} />
+                        <YtOptions quality={ytQuality} onQuality={(q) => { if (q === "thumb") downloadThumb(); else setYtQuality(q); }} />
+                      </>
                     )}
-                  </section>
+                    <div className="pb-20 md:pb-0">
+                      <GradientButton onClick={onDownload} loading={busy} label="Download">
+                        {!busy && (<svg className="w-4 h-4 transition-transform duration-180 group-hover:translate-y-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>)}
+                        Download
+                      </GradientButton>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                  {/* Roadmap / Breakdown / Quick Recap (content-type aware) */}
-                  {(result.roadmap || (result.blocks?.length ?? 0) > 0) && (
-                    <section className="space-y-6 pt-8 border-t border-[var(--border-default)]">
-                      <div className="flex items-center gap-4">
-                        <h3 className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">{sectionTitleFor(result.content_type)}</h3>
-                        <div className="h-px flex-1 bg-[var(--border-default)]" />
-                      </div>
-                      <RoadmapDisplay
-                        roadmap={result.roadmap || ""}
-                        blocks={result.blocks}
-                        fromCache={result.from_cache || false}
-                        skipFirst={true}
-                      />
-                      
-                      {/* Final CTA Banner */}
-                      <div className="mt-12 w-full bg-gradient-to-r from-[#FF8A73]/10 to-[#FF5D8F]/10 rounded-[24px] p-8 text-center border border-[#FF8A73]/20 shadow-sm">
-                        <h4 className="text-xl font-bold text-[var(--text-primary)] mb-3">Want to discuss this further?</h4>
-                        <p className="text-sm text-[var(--text-secondary)] mb-6 max-w-md mx-auto">
-                          Dive deeper into this topic, explore related concepts, or get personalized suggestions.
-                        </p>
-                        <button className="bg-white text-[#FF5D8F] text-sm font-bold px-8 py-3 rounded-full shadow-sm hover:shadow-md transition-shadow">
-                          Start Discussion
+              {/* sticky mobile action for preview */}
+              <AnimatePresence>
+                {stage === "preview" && (
+                  <motion.div initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }} transition={{ duration: 0.35, ease: EASE }} className="md:hidden fixed bottom-0 inset-x-0 z-40 px-5 pt-2 bg-gradient-to-t from-[#F8F7FB] via-[#F8F7FB] to-transparent safe-bottom" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+                    <GradientButton onClick={onDownload} loading={busy} label="Download">Download</GradientButton>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* ── DOWNLOADING ── */}
+          {stage === "downloading" && (
+            <motion.div key="downloading" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35, ease: EASE }} className="pt-8">
+              <DownloadProgress title={dlTitle} meta={dlMeta} thumb={dlThumb} progress={progress} wide={platform === "youtube"} />
+              <div className="md:hidden fixed bottom-0 inset-x-0 z-40 px-5 pt-2 bg-gradient-to-t from-[#F8F7FB] via-[#F8F7FB] to-transparent" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+                <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] !rounded-full px-5 py-3 text-center text-sm font-bold tabular-nums">{Math.round(progress)}% · Downloading...</div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── SUCCESS ── */}
+          {stage === "success" && (
+            <motion.div key="success" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35, ease: EASE }} className="pt-8 flex flex-col gap-3.5">
+              <SuccessCheck />
+              <div className="text-center">
+                <h2 className="text-xl font-extrabold tracking-tight">Video downloaded<br />successfully!</h2>
+                <p className="text-[13px] text-[var(--text-muted)] mt-1">{platform === "youtube" ? "Your video is ready for offline viewing." : "Your reel is ready for offline viewing."}</p>
+              </div>
+              {platform === "youtube" ? (
+                <>
+                  <DownloadedCard title={ytTitle} thumb={ytMeta?.thumbnail} wide meta={`${ytSize ? formatMB(ytSize) + " · " : "156 MB · "}1080p · ${ytDur || "10:24"}`} />
+                  <GradientButton onClick={() => { if (ytBlob) { const a = document.createElement("a"); a.href = ytBlob; a.download = ytFile; a.click(); } else onDownload(); }} label="Download MP4">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    Download .mp4
+                  </GradientButton>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button onClick={downloadMp3} disabled={busy} className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] !rounded-2xl px-3 py-3 text-[13px] font-bold flex items-center justify-center gap-1.5 gr-press min-h-[48px]">🎵 Download .mp3</button>
+                    <button onClick={downloadThumb} className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] !rounded-2xl px-3 py-3 text-[13px] font-bold flex items-center justify-center gap-1.5 gr-press min-h-[48px]">🖼️ Download thumbnail</button>
+                  </div>
+                  <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-4 space-y-1">
+                    {[
+                      { icon: "🎬", l: "MP4 Video", r: `${ytSize ? formatMB(ytSize) : "156 MB"} · 1080p`, fn: () => { if (ytBlob) { const a = document.createElement("a"); a.href = ytBlob; a.download = ytFile; a.click(); } } },
+                      { icon: "🎧", l: "MP3 Audio", r: `${mp3Size ? formatMB(mp3Size) : "28 MB"} · 320 kbps`, fn: downloadMp3 },
+                      { icon: "🖼️", l: "Thumbnail", r: `${thumbSize ? formatMB(thumbSize) : "1.2 MB"} · JPG`, fn: downloadThumb },
+                    ].map((row) => (
+                      <div key={row.l} className="flex items-center gap-3 py-2.5 border-b border-black/5 last:border-0">
+                        <span className="text-lg" aria-hidden>{row.icon}</span>
+                        <span className="flex-1 min-w-0"><span className="block text-[13px] font-bold">{row.l}</span><span className="block text-xs text-[var(--text-muted)]">{row.r}</span></span>
+                        <button onClick={row.fn} aria-label={`Download ${row.l}`} className="w-10 h-10 rounded-full flex items-center justify-center text-[#2563EB] hover:bg-blue-50 min-w-[44px] min-h-[44px]">
+                          <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                         </button>
                       </div>
-                    </section>
-                  )}
-                </div>
-
-                {/* ── RIGHT COLUMN (Sidebar) ── */}
-                <div className="md:col-span-4 space-y-8 md:sticky md:top-24 self-start mt-8 md:mt-0">
-                  {/* SOURCE card */}
-                  {(() => {
-                    const sourceUrl = getSourceUrl(meta, result);
-                    if (!sourceUrl) return null;
-                    return (
-                      <div className="fade-up">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                          <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Source</p>
-                        </div>
-                        <div className="bg-white rounded-[18px] p-5 border border-[var(--border-default)] shadow-[0_8px_24px_rgba(15,23,42,.05)] flex flex-col items-center text-center space-y-4">
-                          <div className="w-12 h-12 rounded-full overflow-hidden shadow-sm border border-gray-100 flex items-center justify-center bg-[#FFE8EF]">
-                             <svg className="w-6 h-6 text-[#FF5D8F]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-1">Instagram Reel</p>
-                            <p className="text-sm font-semibold text-[var(--text-primary)]">
-                              {meta?.username ? `@${meta.username}` : "Original Creator"}
-                            </p>
-                          </div>
-                          <a
-                            href={sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center w-full gap-2 bg-gradient-to-r from-[#FF8A73] to-[#FF5D8F] text-white text-sm font-bold px-6 py-2.5 rounded-full hover:opacity-90 transition-opacity shadow-[0_4px_12px_rgba(255,93,143,.2)]"
-                          >
-                            Open the resource
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* ABOUT THIS ANALYSIS metadata matrix */}
-                  <div className="fade-up" style={{ animationDelay: "50ms" }}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                      <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">About this analysis</p>
-                    </div>
-                    <div className="bg-white rounded-[18px] px-5 py-2 border border-[var(--border-default)] shadow-[0_8px_24px_rgba(15,23,42,.05)]">
-                      {[
-                        { label: "Target Audience", value: result.concept?.target_audience || "General learners", icon: <svg className="w-4 h-4 text-[#FF5D8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
-                        { label: "Content Type", value: contentTypeLabel(result.content_type), icon: <svg className="w-4 h-4 text-[#FF5D8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg> },
-                        { label: "Read Time", value: estimateReadTime(result.roadmap), icon: <svg className="w-4 h-4 text-[#FF5D8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
-                        { label: "Difficulty", value: "Easy", icon: <svg className="w-4 h-4 text-[#FF5D8F]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
-                      ].map((row, i, arr) => (
-                        <div
-                          key={row.label}
-                          className={`flex items-center gap-3 py-3.5 ${i < arr.length - 1 ? "border-b border-gray-100" : ""}`}
-                        >
-                          <div className="w-8 h-8 rounded-full bg-[#FFE8EF] flex items-center justify-center shrink-0">
-                            {row.icon}
-                          </div>
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">{row.label}</span>
-                            <span className="text-sm font-medium text-[var(--text-primary)] truncate">{row.value}</span>
-                          </div>
-                        </div>
-                      ))}
+                    ))}
+                    <div className="rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] p-3 flex gap-2 mt-2">
+                      <span aria-hidden>💡</span>
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed"><span className="font-bold">Tip</span><br />You can also download YouTube Shorts and playlists using the same link.</p>
                     </div>
                   </div>
+                  <button onClick={reset} className="text-[13px] font-semibold text-[var(--text-muted)] hover:text-[var(--brand-solid)] py-3 min-h-[44px]">Decode another →</button>
+                </>
+              ) : (
+                <>
+                  <DownloadedCard title={dlTitle} meta={`${ytSize ? "" : "14.2 MB · "}1080×1920 · ${igDuration ? formatDuration(igDuration) : "00:27"}`} thumb={dlThumb} />
+                  <GradientButton onClick={() => { if (token) { const a = document.createElement("a"); a.href = getDownloadUrl(token); a.setAttribute("download", ""); a.click(); } }} label="Download MP4">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    Download .mp4
+                  </GradientButton>
+                  <div className="rounded-3xl border border-[#FFD9E4] bg-[#FFF0F4] p-5 text-center">
+                    <p className="text-sm font-bold flex items-center justify-center gap-1.5">✨ Need the hidden resources from this Reel?</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 mb-3.5">Find links, get AI breakdown, detect comment bait and more.</p>
+                    <GradientButton shimmer onClick={onAnalyze} label="Find Resources">
+                      Find Resources
+                      <svg className="w-4 h-4 transition-transform duration-180 group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5-5 5M6 12h12" /></svg>
+                    </GradientButton>
+                  </div>
+                  {error && <p role="alert" className="text-[13px] text-[var(--accent-red)] text-center">{error}</p>}
+                </>
+              )}
+            </motion.div>
+          )}
 
-                  {downloadToken && (
-                    <div className="fade-up" style={{ animationDelay: "100ms" }}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Download</p>
-                      </div>
-                      <DownloadButton token={downloadToken} />
-                    </div>
-                  )}
-
-                  {(result.roadmap || (result.blocks?.length ?? 0) > 0) && (
-                    <div className="fade-up" style={{ animationDelay: "200ms" }}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-1.5 h-4 rounded-full" style={{ background: "var(--brand-gradient)" }} />
-                        <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[var(--text-muted)]">Share</p>
-                      </div>
-                      <CapsuleShare result={result} capsuleId={result.capsule_id} />
-                    </div>
-                  )}
-                </div>
-                
+          {/* ── ANALYZING ── */}
+          {stage === "analyzing" && (
+            <motion.div key="analyzing" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35, ease: EASE }} className="pt-8 flex flex-col gap-5">
+              <div className="text-center">
+                <p className="font-extrabold text-lg flex items-center justify-center gap-1.5">✨ {aiIdx < 3 ? "Analyzing Reel..." : "Finding hidden resources..."}</p>
+                <p className="text-[13px] text-[var(--text-muted)] mt-1">{aiIdx < 3 ? "Running AI analysis to find hidden resources." : "This may take 1–2 minutes. You can keep this tab open."}</p>
               </div>
-            </div>
-          </div>
-        )}
+              <AnalysisLiveCards active={aiIdx} progress={aiPct} />
+              <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-5">
+                <AnalysisTimeline active={aiIdx} />
+              </div>
+            </motion.div>
+          )}
 
-        {/* ── Footer ────────────────────────────────────────────────────── */}
-        {!isLoading && (
-          <footer className="w-full py-10 text-center border-t border-[var(--border-default)] bg-white">
-            <p className="text-xs text-[var(--text-muted)] tracking-wide">
-              GetReel &mdash; No follows. No comments. No waiting.
-            </p>
-          </footer>
-        )}
-      </main>
+          {/* ── REPORT ── */}
+          {stage === "report" && result && (
+            <motion.div key="report" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.35, ease: EASE }} className="pt-6 flex flex-col gap-4">
+              <button onClick={reset} className="self-start text-[13px] font-semibold text-[var(--text-secondary)] hover:text-[var(--brand-solid)] min-h-[44px]">← Decode another</button>
+              <ReportTabs tab={reportTab} onTab={setReportTab} counts={counts} />
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={reportTab} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -14 }} transition={{ duration: 0.2 }}>
+                  {reportTab === "Overview" && (
+                    <div className="flex flex-col gap-3.5">
+                      <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-4 flex gap-3.5">
+                        <div className="shrink-0 w-[88px] aspect-[9/16] rounded-xl overflow-hidden bg-[var(--bg-elevated)]">
+                          {dlThumb || igMeta?.thumbnail_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={dlThumb || igMeta?.thumbnail_url || ""} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : null}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-bold leading-snug line-clamp-3">{result.concept?.topic || dlTitle}</p>
+                          <p className="text-[13px] text-[var(--text-secondary)] mt-1">@{igName}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {(result.concept?.key_concepts || ["Tutorial", "AI Tools"]).slice(0, 3).map((t) => (
+                              <span key={t} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[var(--bg-elevated)] text-[var(--text-secondary)]">{t}</span>
+                            ))}
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)] mt-2">14.2 MB · 00:27</p>
+                        </div>
+                      </div>
+                      <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-4">
+                        <p className="text-sm font-bold flex items-center gap-1.5">📄 Quick Summary</p>
+                        <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed mt-2">{summary || "The creator introduces popular AI tools for productivity, content creation and coding."}</p>
+                      </div>
+                    </div>
+                  )}
+                  {reportTab === "Resources" && <ResourceList resources={resources} />}
+                  {reportTab === "Transcript" && (
+                    <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-5">
+                      <p className="text-sm font-bold mb-2">Transcript</p>
+                      <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">{transcript || stripMd(result.roadmap) || "Transcript unavailable for this reel."}</p>
+                    </div>
+                  )}
+                  {reportTab === "Tools" && (
+                    <div className="bg-white rounded-[20px] border border-black/[0.07] shadow-[0_12px_32px_rgba(20,20,40,0.07)] p-5">
+                      <p className="text-sm font-bold mb-3">Tools mentioned</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(result.concept?.tools_mentioned?.length ? result.concept.tools_mentioned : ["No tools detected"]).map((t) => (
+                          <span key={t} className="text-[13px] font-semibold px-3.5 py-2 rounded-full bg-[#FFE8EF] text-[var(--brand-solid)]">{t}</span>
+                        ))}
+                      </div>
+                      {(result.concept?.key_concepts?.length) ? (
+                        <><p className="text-sm font-bold mt-5 mb-3">Key concepts</p>
+                        <div className="flex flex-wrap gap-2">
+                          {result.concept.key_concepts.map((t) => (
+                            <span key={t} className="text-xs px-3 py-1.5 rounded-full bg-[var(--bg-elevated)] text-[var(--text-secondary)]">{t}</span>
+                          ))}
+                        </div></>
+                      ) : null}
+                    </div>
+                  )}
+                  {reportTab === "Breakdown" && (
+                    <RoadmapDisplay roadmap={result.roadmap || ""} blocks={result.blocks} fromCache={result.from_cache || false} skipFirst={true} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+              {token && (
+                <GradientButton onClick={() => { const a = document.createElement("a"); a.href = getDownloadUrl(token); a.setAttribute("download", ""); a.click(); }} label="Download video">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                  Download video
+                </GradientButton>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <BottomNav />
-    </>
+        <footer className="w-full py-10 mt-10 text-center border-t border-black/5">
+          <p className="text-xs text-[var(--text-muted)] tracking-wide">GetReel — No follows. No comments. No waiting.</p>
+        </footer>
+      </div>
+    </main>
   );
 }

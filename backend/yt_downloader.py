@@ -138,6 +138,46 @@ def _ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
 
+async def get_yt_info(url: str) -> dict:
+    """Lightweight metadata prefetch — no download (mirrors /reel-info for IG).
+
+    Returns title/duration/thumbnail/uploader for a preview card.
+    Cookieless-friendly: info fetch rarely trips bot checks, cookies optional.
+    """
+    url = assert_youtube_url(url)
+    ydl_opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 15,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        },
+    }
+    # ponytail: direct file only — B64 materialisation needs a work_dir, not worth it for a prefetch
+    cookiefile = _get_cookiefile()
+    if cookiefile and cookiefile != "__B64__" and os.path.isfile(cookiefile):
+        ydl_opts["cookiefile"] = cookiefile
+
+    def _fetch():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+
+    info = await asyncio.get_running_loop().run_in_executor(None, _fetch)
+    if not info:
+        raise Exception("Could not fetch video metadata.")
+    thumbs = info.get("thumbnails") or []
+    thumb = (thumbs[-1].get("url") if thumbs else None) or info.get("thumbnail")
+    return {
+        "title": info.get("title") or "YouTube video",
+        "duration": info.get("duration"),
+        "thumbnail": thumb,
+        "uploader": info.get("uploader") or info.get("channel"),
+        "view_count": info.get("view_count"),
+        "id": info.get("id"),
+    }
+
+
 async def download_yt_video(url: str, quality: str = "best") -> tuple[str, str, str]:
     """
     Downloads a YouTube video/audio with embedded metadata + thumbnail.

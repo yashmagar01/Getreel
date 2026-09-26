@@ -39,6 +39,9 @@ class Classification:
     content_type: str
     confidence: float
     genre_tags: list[str] = field(default_factory=list)
+    # ponytail: multi-label intent — hybrid reels are teach+bait, not one bucket
+    intent_scores: dict = field(default_factory=dict)
+    secondary_types: list[str] = field(default_factory=list)
 
 
 def _is_empty_withheld(withheld: str) -> bool:
@@ -59,12 +62,48 @@ def _infer_genre_tags(concept: dict, transcript: str) -> list[str]:
     return tags
 
 
-def classify(concept: dict, transcript: str) -> Classification:
+_BAIT_RE = re.compile(
+    r"comment\s+\S|dm\s+(me|you)|link\s+in\s+bio|follow\s+(for|me)|part\s*2|save\s+this|share\s+this",
+    re.IGNORECASE,
+)
+_SELL_RE = re.compile(
+    r"sponsor|affiliate|discount|buy\s+now|price|cost\s+\$|product|shop\s+now|use\s+code",
+    re.IGNORECASE,
+)
+
+
+def _score_intents(concept: dict, transcript: str, caption: str = "") -> dict:
+    """Zero-LLM multi-label scores (0-100). Deterministic, cheap."""
+    concept = concept or {}
+    transcript = transcript or ""
+    caption = caption or ""
+    withheld = str(concept.get("what_creator_withholds") or "").strip().lower()
+    tools = concept.get("tools_mentioned") or []
+    key_concepts = concept.get("key_concepts") or []
+    haystack = " ".join([
+        transcript, caption,
+        str(concept.get("topic") or ""),
+        str(concept.get("what_creator_shows") or ""),
+    ])
+    teaser = bool((withheld and withheld not in _NONE_TOKENS) or tools or key_concepts)
+    word_count = len(transcript.split())
+    teach = 90 if teaser else (40 if word_count > 40 else 10)
+    engagement_bait = 80 if _BAIT_RE.search(haystack) else 15
+    sell = 75 if _SELL_RE.search(haystack) else (35 if tools else 10)
+    # ponytail: entertain is inverse of teach when no genre signal
+    tags = _infer_genre_tags(concept, transcript)
+    entertain = 80 if tags else (55 if word_count > 40 else 15)
+    return {"teach": teach, "sell": sell, "entertain": entertain,
+            "engagement_bait": engagement_bait}
+
+
+def classify(concept: dict, transcript: str, caption: str = "") -> Classification:
     """Rule-first classification.
 
     Rule 1 — teaser signal present in existing concept extraction → teaser_tutorial.
     Rule 2 — enough spoken content for narrative/commentary value → entertainment_commentary.
     Rule 3 — everything else → pure_entertainment.
+    Primary unchanged (backward-compat); intent_scores/secondary_types are additive.
     """
     concept = concept or {}
     transcript = transcript or ""
@@ -72,10 +111,21 @@ def classify(concept: dict, transcript: str) -> Classification:
     withheld = str(concept.get("what_creator_withholds") or "").strip().lower()
     tools = concept.get("tools_mentioned") or []
     key_concepts = concept.get("key_concepts") or []
+    scores = _score_intents(concept, transcript, caption)
+
+    def _secondary(primary: str) -> list[str]:
+        out: list[str] = []
+        if primary != TEASER_TUTORIAL and scores["teach"] >= 70:
+            out.append(TEASER_TUTORIAL)
+        if scores["engagement_bait"] >= 50:
+            out.append("engagement_bait")
+        if scores["sell"] >= 60:
+            out.append("product_promo")
+        return out
 
     # Rule 1 — clear teaser signal already present
     if (withheld and withheld not in _NONE_TOKENS) or tools or key_concepts:
-        result = Classification(TEASER_TUTORIAL, 0.9, [])
+        result = Classification(TEASER_TUTORIAL, 0.9, [], scores, _secondary(TEASER_TUTORIAL))
         logger.info(f"[CLASSIFY] teaser_tutorial (withheld={withheld[:60]!r}, tools={len(tools)}, concepts={len(key_concepts)})")
         return result
 
@@ -86,13 +136,13 @@ def classify(concept: dict, transcript: str) -> Classification:
     topic = str(concept.get("topic") or "")
     descriptive_chars = len(shows) + len(topic)
     if word_count > 40 or descriptive_chars > 120:
-        result = Classification(ENTERTAINMENT_COMMENTARY, 0.6, [])
+        result = Classification(ENTERTAINMENT_COMMENTARY, 0.6, [], scores, _secondary(ENTERTAINMENT_COMMENTARY))
         logger.info(f"[CLASSIFY] entertainment_commentary (words={word_count}, desc_chars={descriptive_chars})")
         return result
 
     # Rule 3 — near-zero text signal: dance / lip-sync / comedy
     tags = _infer_genre_tags(concept, transcript)
-    result = Classification(PURE_ENTERTAINMENT, 0.7, tags)
+    result = Classification(PURE_ENTERTAINMENT, 0.7, tags, scores, _secondary(PURE_ENTERTAINMENT))
     logger.info(f"[CLASSIFY] pure_entertainment (words={word_count}, tags={tags})")
     return result
 

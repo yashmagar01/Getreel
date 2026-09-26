@@ -1,4 +1,5 @@
 import logging
+import re
 from providers import build_chain, complete_with_fallback
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,13 @@ CRITICAL RULES:
 - Adapt the content to make sense for the video (e.g., if it's a movie edit, explain the editing style and story context).
 - Do NOT replace specific details with generic alternatives.
 - The "What You'll Need" section must only list tools actually relevant to this specific topic (e.g., video editors for a movie edit, or 'none' if inapplicable).
+- TOOL GROUNDING (hard rule): the TOOLS and KEY CONCEPTS lists below are the ONLY
+  named products, services, libraries, commands, packages, or platforms you may
+  mention. NEVER introduce a named tool, service, CLI command, or code dependency
+  that does not appear there or in the reel itself.
+- If the implementation was withheld behind a comment/DM gate or simply not shown,
+  do NOT invent code, commands, or setup steps. Describe what the reel demonstrates
+  and point the viewer at the creator's linked resource instead.
 - You MUST format your response in clean Markdown using EXACTLY the 5 sections requested in the prompt, even if you have to adapt their meaning slightly."""
 
 
@@ -84,3 +92,33 @@ prompts/techniques were identified, include them by name and reconstruct their c
 
     logger.info(f"Roadmap generated. Length: {len(roadmap)} chars")
     return roadmap
+
+
+# Matches "comment SKILL", "DM you", "I'll DM", "drop a comment" style gates.
+_GATE_RE = re.compile(
+    r"comment\s+[\"'“‘\w]|dms?\s+(you|me\b)|i['’]ll\s+dms?|comment\s+below|drop\s+a\s+comment",
+    re.IGNORECASE,
+)
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def apply_gate_honesty_filter(roadmap: str, caption: str) -> str:
+    """Strip unknowable implementation from gated reels (zero-LLM honesty guard).
+
+    When the caption gates the resource behind a comment/DM keyword, any code
+    fences in the guide are reconstructions of content the reel never showed —
+    replace them with how to get the real resource instead of presenting
+    guesses as fact. Pass-through when no gate or no code blocks.
+    """
+    if not roadmap or "```" not in roadmap:
+        return roadmap
+    if not caption or not _GATE_RE.search(caption):
+        return roadmap
+    stripped = _FENCE_RE.sub("", roadmap).strip()
+    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
+    logger.info("Gate honesty filter: stripped code fences from gated roadmap")
+    return stripped + (
+        "\n\n> **Note:** the full implementation wasn't shown in the reel — "
+        "it lives in the creator's gated resource. Follow the link or keyword above "
+        "to get the exact files."
+    )

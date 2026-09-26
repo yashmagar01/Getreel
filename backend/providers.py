@@ -21,8 +21,9 @@ class LLMProvider:
 
 # Best free-tier text model on Groq (Production, strong reasoning).
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
-# Groq's vision-capable model (replaces decommissioned llama-3.2-11b-vision-preview).
-GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+# NOTE 2026-09-26: Groq ships zero vision models — vision goes via Gemini.
+# Kept for backward-compat imports; do not put a Groq ID in concept_vision.
+GROQ_VISION_MODEL = "openai/gpt-oss-120b"
 # Model-ID families that belong to Groq. A caller may pass a model meant for a
 # different provider — each provider below only honours IDs in its own family
 # and otherwise falls back to its default (prevents e.g. a Groq ID being sent
@@ -66,9 +67,9 @@ class GroqProvider(LLMProvider):
 
 # ── Gemini ──────────────────────────────────────────────────────────────────────
 
-# Best free-tier model on Google for new API keys (live-verified 2026-09-14:
-# gemini-2.5-flash now 404s for new users; the API itself directs to 3.6-flash).
-GEMINI_DEFAULT_MODEL = "gemini-3.6-flash"
+# Best free-tier model on Google (live-verified 2026-09-26: 3.8-flash newest
+# stable; 3.7-flash 503s under load; 2.5-flash legacy).
+GEMINI_DEFAULT_MODEL = "gemini-3.8-flash"
 
 
 def _is_gemini_model(model: str | None) -> bool:
@@ -82,7 +83,7 @@ class GeminiProvider(LLMProvider):
     DEFAULT_MODEL = GEMINI_DEFAULT_MODEL
 
     def __init__(self):
-        self.api_key = os.getenv("GOOGLE_API_KEY")
+        self.api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GOOGLE_API_KEY is not set.")
 
@@ -168,7 +169,7 @@ class NvidiaProvider(LLMProvider):
             api_key=self.api_key
         )
         response = client.chat.completions.create(
-            model=model or "meta/llama-3.2-90b-vision-preview",
+            model=model or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
